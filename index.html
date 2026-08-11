@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>電車ぬりえ 3D</title>
+<style>
+  :root{
+    --bg:#14171c;
+    --panel:#1c2028;
+    --panel2:#242a34;
+    --line:#333a47;
+    --txt:#eef0f4;
+    --dim:#8992a3;
+    --accent:#ff8a3d;
+    --accent2:#4fc3f7;
+    --ok:#5bd68a;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:"Hiragino Sans","Yu Gothic UI",sans-serif;
+    font-size:14px;
+    display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  header{
+    flex:0 0 auto; background:var(--panel); border-bottom:1px solid var(--line);
+    padding:10px 16px; display:flex; align-items:center; gap:14px;
+  }
+  header h1{
+    font-size:16px; margin:0; font-weight:800; letter-spacing:.02em;
+    display:flex; align-items:center; gap:8px;
+  }
+  header h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block;}
+  .modeTabs{display:flex; gap:4px; background:var(--panel2); border-radius:8px; padding:3px;}
+  .modeTabs button{
+    border:none; background:transparent; color:var(--dim); font-weight:700; font-size:13px;
+    padding:7px 16px; border-radius:6px; cursor:pointer; font-family:inherit;
+  }
+  .modeTabs button.on{background:var(--accent); color:#241205;}
+  header .sp{flex:1;}
+  .wrapBtn{
+    background:linear-gradient(180deg,#ff9a52,var(--accent));
+    border:none; color:#2a1300; font-weight:800; font-size:13px;
+    padding:9px 18px; border-radius:8px; cursor:pointer; font-family:inherit;
+    box-shadow:0 2px 0 #b85f1e;
+  }
+  .wrapBtn:active{transform:translateY(1px); box-shadow:0 1px 0 #b85f1e;}
+
+  #paintView, #sceneView{flex:1 1 auto; min-height:0; display:none;}
+  #paintView.on, #sceneView.on{display:flex;}
+
+  /* ===== 塗り絵画面 ===== */
+  #paintView{flex-direction:row;}
+  #faceRail{
+    flex:0 0 148px; background:var(--panel); border-right:1px solid var(--line);
+    padding:12px 10px; overflow-y:auto;
+  }
+  #faceRail .lbl{font-size:11px; color:var(--dim); letter-spacing:.08em; margin:2px 2px 8px;}
+  .faceBtn{
+    width:100%; display:flex; flex-direction:column; align-items:center; gap:6px;
+    background:var(--panel2); border:2px solid transparent; border-radius:10px;
+    padding:10px 6px; margin-bottom:8px; cursor:pointer; color:var(--txt);
+  }
+  .faceBtn.on{border-color:var(--accent); background:#3a2a18;}
+  .faceBtn .thumb{
+    width:100%; aspect-ratio:1/1; border-radius:6px; background:#0d0f13;
+    border:1px solid var(--line); overflow:hidden; position:relative;
+  }
+  .faceBtn .thumb canvas{width:100%;height:100%;object-fit:contain;}
+  .faceBtn .fname{font-size:12px; font-weight:700;}
+  .faceBtn .fdim{font-size:10px; color:var(--dim);}
+
+  #paintCenter{flex:1 1 auto; display:flex; flex-direction:column; min-width:0; position:relative;}
+  #canvasHost{
+    flex:1 1 auto; display:flex; align-items:center; justify-content:center;
+    background:
+      linear-gradient(45deg,#20242c 25%,transparent 25%),
+      linear-gradient(-45deg,#20242c 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#20242c 75%),
+      linear-gradient(-45deg,transparent 75%,#20242c 75%);
+    background-size:24px 24px;
+    background-position:0 0,0 12px,12px -12px,-12px 0px;
+    background-color:#171a20;
+    padding:24px; overflow:auto; min-height:0;
+  }
+  #paintCanvas{
+    background:#ffffff; border-radius:4px; touch-action:none;
+    box-shadow:0 8px 30px #0007; cursor:crosshair;
+  }
+
+  #toolbar{
+    flex:0 0 auto; background:var(--panel); border-top:1px solid var(--line);
+    padding:10px 14px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  }
+  .toolGroup{display:flex; align-items:center; gap:6px;}
+  .toolGroup .glabel{font-size:11px; color:var(--dim); margin-right:2px;}
+  .toolBtn{
+    background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    width:38px; height:38px; border-radius:8px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:17px;
+  }
+  .toolBtn.on{background:var(--accent); border-color:var(--accent); color:#241205;}
+  .toolBtn:hover{border-color:#556;}
+  input[type=range]{accent-color:var(--accent); width:90px;}
+  #sizeVal{width:26px; font-size:12px; color:var(--dim); text-align:right;}
+
+  .swatch{
+    width:26px; height:26px; border-radius:6px; border:2px solid #0006; cursor:pointer;
+  }
+  .swatch.selected{outline:2px solid var(--accent); outline-offset:2px;}
+  #presetRow{display:flex; gap:5px;}
+  #curColorWrap{display:flex; align-items:center; gap:6px;}
+  input[type=color]{
+    width:34px; height:34px; padding:0; border:1px solid var(--line);
+    border-radius:8px; background:none; cursor:pointer;
+  }
+  #hexInput{
+    width:76px; background:#12151a; color:var(--txt); border:1px solid var(--line);
+    border-radius:6px; padding:6px 7px; font-family:ui-monospace,monospace; font-size:12px;
+  }
+
+  button.plain{
+    background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    padding:8px 12px; border-radius:8px; cursor:pointer; font-family:inherit; font-size:12.5px;
+  }
+  button.plain:hover{border-color:#667;}
+  #fileInputImg{display:none;}
+
+  /* 画像配置中のオーバーレイ操作 */
+  #imgAdjustBar{
+    display:none; align-items:center; gap:10px; background:#1c2028; border:1px solid var(--accent2);
+    padding:8px 12px; border-radius:8px; position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+    font-size:12px; z-index:5;
+  }
+  #imgAdjustBar.on{display:flex;}
+  #imgAdjustBar label{color:var(--dim);}
+
+  /* ===== 3D画面 ===== */
+  #sceneView{position:relative;}
+  #sceneHost{flex:1; position:relative;}
+  #sceneHost canvas{display:block;}
+  #sceneControls{
+    position:absolute; left:14px; bottom:14px; display:flex; flex-direction:column; gap:10px;
+    background:#1c2028cc; backdrop-filter:blur(6px); border:1px solid var(--line);
+    border-radius:12px; padding:12px 14px;
+  }
+  #sceneControls .row{display:flex; align-items:center; gap:8px;}
+  #sceneControls .glabel{font-size:11px; color:var(--dim); width:64px;}
+  .pillBtn{
+    background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    padding:8px 14px; border-radius:20px; cursor:pointer; font-family:inherit; font-size:13px; font-weight:700;
+  }
+  .pillBtn.on{background:var(--accent2); border-color:var(--accent2); color:#04222c;}
+  .pillBtn:hover{border-color:#667;}
+  #trackBtns{display:flex; gap:6px;}
+
+  #toast{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:#000c; border:1px solid var(--line); padding:8px 16px; border-radius:16px;
+    opacity:0; transition:opacity .2s; pointer-events:none; z-index:99; font-size:12.5px;
+  }
+  #toast.on{opacity:1;}
+
+  #loadingScene{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--dim); font-size:13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="dot"></span>電車ぬりえ 3D</h1>
+  <div class="modeTabs">
+    <button id="tabPaint" class="on">ぬりえ</button>
+    <button id="tabScene">3Dプレビュー</button>
+  </div>
+  <span class="sp"></span>
+  <button class="wrapBtn" id="bWrap">🚃 電車にラッピング！</button>
+</header>
+
+<div id="paintView" class="on">
+  <div id="faceRail">
+    <div class="lbl">めん を えらぶ</div>
+    <div id="faceList"></div>
+  </div>
+  <div id="paintCenter">
+    <div id="canvasHost">
+      <canvas id="paintCanvas"></canvas>
+    </div>
+    <div id="imgAdjustBar">
+      <label>おおきさ</label>
+      <input type="range" id="imgScaleR" min="10" max="300" value="100">
+      <button class="plain" id="bImgOk">配置を確定</button>
+      <button class="plain" id="bImgCancel">取り消し</button>
+    </div>
+    <div id="toolbar">
+      <div class="toolGroup">
+        <span class="glabel">ツール</span>
+        <button class="toolBtn on" id="toolPen" title="ペン">✏️</button>
+        <button class="toolBtn" id="toolFill" title="塗りつぶし">🪣</button>
+        <button class="toolBtn" id="toolEraser" title="消しゴム">🧹</button>
+      </div>
+      <div class="toolGroup">
+        <span class="glabel">ふとさ</span>
+        <input type="range" id="sizeRange" min="1" max="60" value="10">
+        <span id="sizeVal">10</span>
+      </div>
+      <div class="toolGroup">
+        <span class="glabel">いろ</span>
+        <div id="presetRow"></div>
+        <div id="curColorWrap">
+          <input type="color" id="colorPicker" value="#ff8a3d">
+          <input type="text" id="hexInput" value="#FF8A3D" maxlength="7">
+        </div>
+      </div>
+      <div class="toolGroup">
+        <button class="plain" id="bImgLoad">🖼️ 画像を読み込む</button>
+        <input type="file" id="fileInputImg" accept="image/*">
+      </div>
+      <div class="toolGroup">
+        <button class="plain" id="bClearFace">この面をクリア</button>
+        <button class="plain" id="bGuide">窓ガイドを表示</button>
+        <button class="plain" id="bUndo">元に戻す</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="sceneView">
+  <div id="sceneHost"></div>
+  <div id="sceneControls">
+    <div class="row">
+      <span class="glabel">回転</span>
+      <button class="pillBtn" id="bSpin">▶ 回転する</button>
+    </div>
+    <div class="row">
+      <span class="glabel">走行</span>
+      <div id="trackBtns">
+        <button class="pillBtn" id="bFwd">▶ 前進</button>
+        <button class="pillBtn" id="bStop">■ 停止</button>
+        <button class="pillBtn" id="bBack">◀ 後進</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="glabel">速度</span>
+      <input type="range" id="speedRange" min="1" max="10" value="4">
+    </div>
+    <div class="row">
+      <button class="pillBtn" id="bShot">📷 スクリーンショット</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================
+   電車の寸法（この比率がそのまま各面キャンバスの縦横比になる）
+   ============================================================ */
+const TRAIN = { width: 2.0, height: 2.2, length: 5.0 };
+
+// 面定義：id, ラベル, キャンバス解像度（寸法比に対応）
+const FACES = [
+  { id:'front', label:'正面',  w: TRAIN.width, h: TRAIN.height },
+  { id:'back',  label:'背面',  w: TRAIN.width, h: TRAIN.height },
+  { id:'right', label:'右側面', w: TRAIN.length, h: TRAIN.height },
+  { id:'left',  label:'左側面', w: TRAIN.length, h: TRAIN.height },
+  { id:'top',   label:'天井',  w: TRAIN.length, h: TRAIN.width },
+];
+const RES = 64; // 1メートルあたりのpx（解像度）
+
+const state = {
+  faceId: 'front',
+  faces: {}, // id -> {canvas, ctx, undoStack}
+  tool: 'pen',
+  color: '#ff8a3d',
+  size: 10,
+};
+
+const PRESETS = [
+  '#ffffff','#1a1a1a','#e8384f','#f5941f','#f6d743','#4caf50',
+  '#3f7fd1','#7ec4e8','#a855f7','#f472b6','#8d6e63','#9098a3',
+];
+
+/* ============================================================
+   窓・ドアの下絵ガイド
+   ============================================================ */
+function drawGuide(id, ctx, w, h){
+  ctx.save();
+  ctx.strokeStyle = '#111111';
+  ctx.lineJoin = 'round';
+
+  if(id === 'front' || id === 'back'){
+    ctx.lineWidth = Math.max(1, RES * 0.014);
+
+    // 運転席窓（中央上部の大きめの窓）
+    const winW = w*0.5, winH = h*0.3;
+    roundRectStroke(ctx, (w-winW)/2, h*0.1, winW, winH, RES*0.1);
+
+    // 車体の横帯（2本、電車らしいライン）
+    const stripeYs = [h*0.55, h*0.62];
+    stripeYs.forEach(sy => {
+      ctx.beginPath();
+      ctx.moveTo(w*0.06, sy);
+      ctx.lineTo(w*0.94, sy);
+      ctx.stroke();
+    });
+
+    // ヘッドライト（左右2つの丸）
+    const lightR = Math.min(w,h)*0.05;
+    [0.22, 0.78].forEach(lx => {
+      ctx.beginPath();
+      ctx.arc(w*lx, h*0.74, lightR, 0, Math.PI*2);
+      ctx.stroke();
+    });
+
+  } else if(id === 'right' || id === 'left'){
+    ctx.lineWidth = Math.max(1, RES * 0.016);
+    // 側面：等間隔の窓＋ドア2箇所
+    const marginX = w*0.04;
+    const usable = w - marginX*2;
+    const nWin = Math.max(3, Math.round(w/1.15)); // 全長に応じて窓数を調整
+    const doorPositions = [0.22, 0.78]; // 全長に対する比率でドアを2箇所
+    const doorW = w*0.11;
+
+    // ドア（縦長の四角）
+    doorPositions.forEach(dp => {
+      const dx = w*dp - doorW/2;
+      roundRectStroke(ctx, dx, h*0.08, doorW, h*0.86, RES*0.06);
+    });
+
+    // 窓（ドアを避けて等間隔配置）
+    const winW = w/nWin * 0.55;
+    const winH = h*0.34;
+    for(let i=0;i<nWin;i++){
+      const cx = (w/nWin)*(i+0.5);
+      const nearDoor = doorPositions.some(dp => Math.abs(cx - w*dp) < doorW*0.9);
+      if(nearDoor) continue;
+      roundRectStroke(ctx, cx - winW/2, h*0.18, winW, winH, RES*0.06);
+    }
+  }
+  // 天井はガイドなし
+
+  ctx.restore();
+}
+
+function roundRectStroke(ctx, x, y, w, h, r){
+  r = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+/* ============================================================
+   面キャンバスの初期化
+   ============================================================ */
+function initFaces(){
+  FACES.forEach(f => {
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(f.w * RES);
+    cv.height = Math.round(f.h * RES);
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,cv.width,cv.height);
+    drawGuide(f.id, ctx, cv.width, cv.height);
+    state.faces[f.id] = { canvas: cv, ctx, undoStack: [] };
+    pushUndoSnapshot(f.id, true);
+  });
+}
+
+function pushUndoSnapshot(id, isInit){
+  const f = state.faces[id];
+  const data = f.ctx.getImageData(0,0,f.canvas.width,f.canvas.height);
+  f.undoStack.push(data);
+  if(f.undoStack.length > 25) f.undoStack.shift();
+}
+
+function undoFace(id){
+  const f = state.faces[id];
+  if(f.undoStack.length < 2){ toast('これ以上戻せません'); return; }
+  f.undoStack.pop();
+  const prev = f.undoStack[f.undoStack.length-1];
+  f.ctx.putImageData(prev, 0, 0);
+  refreshThumb(id);
+  syncMainCanvas();
+}
+
+/* ============================================================
+   面選択UI（サムネイル一覧）
+   ============================================================ */
+const faceListEl = document.getElementById('faceList');
+const faceBtnEls = {};
+
+function buildFaceRail(){
+  FACES.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'faceBtn' + (f.id === state.faceId ? ' on' : '');
+    btn.innerHTML = `
+      <div class="thumb"><canvas></canvas></div>
+      <div class="fname">${f.label}</div>
+      <div class="fdim">${f.w.toFixed(1)}×${f.h.toFixed(1)}m</div>
+    `;
+    btn.onclick = () => selectFace(f.id);
+    faceListEl.appendChild(btn);
+    faceBtnEls[f.id] = btn;
+  });
+  FACES.forEach(f => refreshThumb(f.id));
+}
+
+function refreshThumb(id){
+  const btn = faceBtnEls[id];
+  if(!btn) return;
+  const thumbCv = btn.querySelector('.thumb canvas');
+  const src = state.faces[id].canvas;
+  thumbCv.width = src.width; thumbCv.height = src.height;
+  thumbCv.getContext('2d').drawImage(src, 0, 0);
+}
+
+function selectFace(id){
+  state.faceId = id;
+  Object.values(faceBtnEls).forEach(b => b.classList.remove('on'));
+  faceBtnEls[id].classList.add('on');
+  syncMainCanvas();
+}
+
+/* ============================================================
+   メイン編集キャンバス
+   ============================================================ */
+const mainCanvas = document.getElementById('paintCanvas');
+const mainCtx = mainCanvas.getContext('2d');
+
+function syncMainCanvas(){
+  const f = state.faces[state.faceId];
+  mainCanvas.width = f.canvas.width;
+  mainCanvas.height = f.canvas.height;
+  // 画面上の表示サイズ（縦横比維持、大きめに表示）
+  const maxW = 640, maxH = 460;
+  const scale = Math.min(maxW / f.canvas.width, maxH / f.canvas.height, 3);
+  mainCanvas.style.width = (f.canvas.width * scale) + 'px';
+  mainCanvas.style.height = (f.canvas.height * scale) + 'px';
+  mainCtx.drawImage(f.canvas, 0, 0);
+}
+
+function commitMainToFace(){
+  const f = state.faces[state.faceId];
+  f.ctx.drawImage(mainCanvas, 0, 0);
+}
+
+/* ---- 描画ツール ---- */
+let drawing = false;
+let lastPt = null;
+
+function getPos(e){
+  const r = mainCanvas.getBoundingClientRect();
+  const cx = (e.touches ? e.touches[0].clientX : e.clientX);
+  const cy = (e.touches ? e.touches[0].clientY : e.clientY);
+  const x = (cx - r.left) * (mainCanvas.width / r.width);
+  const y = (cy - r.top) * (mainCanvas.height / r.height);
+  return { x, y };
+}
+
+function strokeTo(p0, p1){
+  mainCtx.lineCap = 'round';
+  mainCtx.lineJoin = 'round';
+  mainCtx.lineWidth = state.size;
+  if(state.tool === 'eraser'){
+    mainCtx.strokeStyle = '#ffffff';
+  } else {
+    mainCtx.strokeStyle = state.color;
+  }
+  mainCtx.beginPath();
+  mainCtx.moveTo(p0.x, p0.y);
+  mainCtx.lineTo(p1.x, p1.y);
+  mainCtx.stroke();
+}
+
+function dotAt(p){
+  mainCtx.fillStyle = state.tool === 'eraser' ? '#ffffff' : state.color;
+  mainCtx.beginPath();
+  mainCtx.arc(p.x, p.y, state.size/2, 0, Math.PI*2);
+  mainCtx.fill();
+}
+
+function hexToRgba(hex){
+  const v = hex.replace('#','');
+  const r = parseInt(v.substring(0,2),16);
+  const g = parseInt(v.substring(2,4),16);
+  const b = parseInt(v.substring(4,6),16);
+  return [r,g,b,255];
+}
+
+function floodFill(startX, startY, fillColor){
+  startX = Math.floor(startX); startY = Math.floor(startY);
+  const w = mainCanvas.width, h = mainCanvas.height;
+  if(startX < 0 || startY < 0 || startX >= w || startY >= h) return;
+  const imgData = mainCtx.getImageData(0,0,w,h);
+  const data = imgData.data;
+  const idx = (x,y) => (y*w+x)*4;
+  const target = data.slice(idx(startX,startY), idx(startX,startY)+4);
+  const [fr,fg,fb,fa] = fillColor;
+  if(target[0]===fr && target[1]===fg && target[2]===fb && target[3]===fa) return;
+
+  const tolerance = 40;
+  function matches(i){
+    return Math.abs(data[i]-target[0]) <= tolerance &&
+           Math.abs(data[i+1]-target[1]) <= tolerance &&
+           Math.abs(data[i+2]-target[2]) <= tolerance &&
+           Math.abs(data[i+3]-target[3]) <= tolerance;
+  }
+
+  const stack = [[startX,startY]];
+  const visited = new Uint8Array(w*h);
+  while(stack.length){
+    const [x,y] = stack.pop();
+    if(x<0||y<0||x>=w||y>=h) continue;
+    const p = y*w+x;
+    if(visited[p]) continue;
+    const i = p*4;
+    if(!matches(i)) continue;
+    visited[p] = 1;
+    data[i]=fr; data[i+1]=fg; data[i+2]=fb; data[i+3]=fa;
+    stack.push([x+1,y]); stack.push([x-1,y]); stack.push([x,y+1]); stack.push([x,y-1]);
+  }
+  mainCtx.putImageData(imgData, 0, 0);
+}
+
+function onPointerDown(e){
+  if(imgPlacing) return;
+  e.preventDefault();
+  const p = getPos(e);
+  if(state.tool === 'fill'){
+    floodFill(p.x, p.y, hexToRgba(state.color));
+    commitMainToFace(); pushUndoSnapshot(state.faceId); refreshThumb(state.faceId);
+    return;
+  }
+  drawing = true;
+  lastPt = p;
+  dotAt(p);
+}
+function onPointerMove(e){
+  if(!drawing) return;
+  e.preventDefault();
+  const p = getPos(e);
+  strokeTo(lastPt, p);
+  lastPt = p;
+}
+function onPointerUp(){
+  if(!drawing) return;
+  drawing = false;
+  commitMainToFace();
+  pushUndoSnapshot(state.faceId);
+  refreshThumb(state.faceId);
+}
+
+mainCanvas.addEventListener('mousedown', onPointerDown);
+mainCanvas.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup', onPointerUp);
+mainCanvas.addEventListener('touchstart', onPointerDown, { passive:false });
+mainCanvas.addEventListener('touchmove', onPointerMove, { passive:false });
+mainCanvas.addEventListener('touchend', onPointerUp);
+
+/* ---- ツールバー配線 ---- */
+const toolBtns = { pen: document.getElementById('toolPen'), fill: document.getElementById('toolFill'), eraser: document.getElementById('toolEraser') };
+Object.entries(toolBtns).forEach(([name, btn]) => {
+  btn.onclick = () => {
+    state.tool = name;
+    Object.values(toolBtns).forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  };
+});
+
+const sizeRange = document.getElementById('sizeRange');
+const sizeVal = document.getElementById('sizeVal');
+sizeRange.oninput = () => { state.size = +sizeRange.value; sizeVal.textContent = state.size; };
+
+const presetRow = document.getElementById('presetRow');
+const colorPicker = document.getElementById('colorPicker');
+const hexInput = document.getElementById('hexInput');
+let swatchEls = [];
+function buildPresets(){
+  PRESETS.forEach(c => {
+    const sw = document.createElement('button');
+    sw.className = 'swatch';
+    sw.style.background = c;
+    sw.type = 'button';
+    sw.onclick = () => setColor(c);
+    presetRow.appendChild(sw);
+    swatchEls.push({el:sw, c});
+  });
+}
+function setColor(c){
+  state.color = c;
+  colorPicker.value = c;
+  hexInput.value = c.toUpperCase();
+  swatchEls.forEach(s => s.el.classList.toggle('selected', s.c.toLowerCase() === c.toLowerCase()));
+}
+colorPicker.oninput = () => setColor(colorPicker.value);
+hexInput.onchange = () => {
+  let v = hexInput.value.trim();
+  if(!v.startsWith('#')) v = '#' + v;
+  if(/^#[0-9a-fA-F]{6}$/.test(v)) setColor(v);
+  else hexInput.value = state.color.toUpperCase();
+};
+
+document.getElementById('bClearFace').onclick = () => {
+  mainCtx.fillStyle = '#ffffff';
+  mainCtx.fillRect(0,0,mainCanvas.width,mainCanvas.height);
+  commitMainToFace();
+  pushUndoSnapshot(state.faceId);
+  refreshThumb(state.faceId);
+};
+document.getElementById('bGuide').onclick = () => {
+  drawGuide(state.faceId, mainCtx, mainCanvas.width, mainCanvas.height);
+  commitMainToFace();
+  pushUndoSnapshot(state.faceId);
+  refreshThumb(state.faceId);
+};
+document.getElementById('bUndo').onclick = () => undoFace(state.faceId);
+
+/* ---- 画像読み込み・配置 ---- */
+let imgPlacing = null; // {img, x,y, baseScale, curScale}
+const fileInputImg = document.getElementById('fileInputImg');
+const imgAdjustBar = document.getElementById('imgAdjustBar');
+const imgScaleR = document.getElementById('imgScaleR');
+
+document.getElementById('bImgLoad').onclick = () => fileInputImg.click();
+fileInputImg.onchange = e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => startImagePlacement(img);
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+};
+
+function startImagePlacement(img){
+  const cw = mainCanvas.width, ch = mainCanvas.height;
+  const baseScale = Math.min(cw / img.width, ch / img.height) * 0.9;
+  imgPlacing = { img, x: cw/2, y: ch/2, baseScale, curScale: 1 };
+  imgScaleR.value = 100;
+  imgAdjustBar.classList.add('on');
+  redrawWithPlacement();
+  enableImageDrag();
+}
+
+function redrawWithPlacement(){
+  syncMainCanvas(); // 面の確定内容を再描画
+  if(!imgPlacing) return;
+  const { img, x, y, baseScale, curScale } = imgPlacing;
+  const s = baseScale * (curScale);
+  const w = img.width * s, h = img.height * s;
+  mainCtx.drawImage(img, x - w/2, y - h/2, w, h);
+}
+
+imgScaleR.oninput = () => {
+  imgPlacing.curScale = imgScaleR.value / 100;
+  redrawWithPlacement();
+};
+
+let imgDragging = false;
+function enableImageDrag(){ /* no-op: handled by shared listeners below via imgPlacing flag */ }
+
+// 画像配置中のドラッグは、通常の描画リスナー（onPointerDown/Move/Up）とは
+// 完全に分離するため、imgPlacing が立っている間は onPointerDown 側で return して
+// こちらのハンドラのみが反応するようにしている。
+mainCanvas.addEventListener('mousedown', e => {
+  if(!imgPlacing) return;
+  imgDragging = true;
+  const p = getPos(e);
+  imgPlacing.x = p.x; imgPlacing.y = p.y;
+  redrawWithPlacement();
+});
+mainCanvas.addEventListener('mousemove', e => {
+  if(!imgPlacing || !imgDragging) return;
+  const p = getPos(e);
+  imgPlacing.x = p.x; imgPlacing.y = p.y;
+  redrawWithPlacement();
+});
+window.addEventListener('mouseup', () => { imgDragging = false; });
+mainCanvas.addEventListener('touchstart', e => {
+  if(!imgPlacing) return;
+  const p = getPos(e);
+  imgPlacing.x = p.x; imgPlacing.y = p.y;
+  redrawWithPlacement();
+}, { passive:true });
+mainCanvas.addEventListener('touchmove', e => {
+  if(!imgPlacing) return;
+  const p = getPos(e);
+  imgPlacing.x = p.x; imgPlacing.y = p.y;
+  redrawWithPlacement();
+}, { passive:true });
+
+document.getElementById('bImgOk').onclick = () => {
+  commitMainToFace();
+  pushUndoSnapshot(state.faceId);
+  refreshThumb(state.faceId);
+  imgPlacing = null;
+  imgAdjustBar.classList.remove('on');
+};
+document.getElementById('bImgCancel').onclick = () => {
+  imgPlacing = null;
+  imgAdjustBar.classList.remove('on');
+  syncMainCanvas();
+};
+
+/* ============================================================
+   モード切替タブ
+   ============================================================ */
+const paintView = document.getElementById('paintView');
+const sceneView = document.getElementById('sceneView');
+const tabPaint = document.getElementById('tabPaint');
+const tabScene = document.getElementById('tabScene');
+
+tabPaint.onclick = () => switchMode('paint');
+tabScene.onclick = () => switchMode('scene');
+
+function switchMode(mode){
+  paintView.classList.toggle('on', mode === 'paint');
+  sceneView.classList.toggle('on', mode === 'scene');
+  tabPaint.classList.toggle('on', mode === 'paint');
+  tabScene.classList.toggle('on', mode === 'scene');
+  if(mode === 'scene') requestAnimationFrame(resizeScene);
+}
+
+/* ============================================================
+   3Dシーン
+   ============================================================ */
+const sceneHost = document.getElementById('sceneHost');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1116);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+camera.position.set(7, 5, 9);
+camera.lookAt(0,1,0);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+sceneHost.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const dl = new THREE.DirectionalLight(0xffffff, 1.6);
+dl.position.set(6, 10, 4);
+scene.add(dl);
+const dl2 = new THREE.DirectionalLight(0xffffff, 0.4);
+dl2.position.set(-6, 3, -4);
+scene.add(dl2);
+
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(20, 48),
+  new THREE.MeshStandardMaterial({ color:0x1a1e26, roughness:1 })
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+const grid = new THREE.GridHelper(40, 40, 0x333a47, 0x22262e);
+scene.add(grid);
+
+function resizeScene(){
+  const w = sceneHost.clientWidth, h = sceneHost.clientHeight;
+  if(w===0||h===0) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resizeScene).observe(sceneHost);
+
+/* ---- 簡易オービットカメラ（マウスドラッグで周回） ---- */
+let camAngle = 0.7, camElev = 0.42, camDist = 11.5;
+function updateCamera(){
+  camera.position.set(
+    Math.sin(camAngle)*camDist*Math.cos(camElev),
+    Math.sin(camElev)*camDist + 1.2,
+    Math.cos(camAngle)*camDist*Math.cos(camElev)
+  );
+  camera.lookAt(0, 1, 0);
+}
+updateCamera();
+let dragCam = false, dragStart = null;
+renderer.domElement.addEventListener('pointerdown', e => { dragCam = true; dragStart = {x:e.clientX,y:e.clientY,a:camAngle,el:camElev}; });
+window.addEventListener('pointerup', () => dragCam = false);
+window.addEventListener('pointermove', e => {
+  if(!dragCam) return;
+  camAngle = dragStart.a - (e.clientX - dragStart.x) * 0.008;
+  camElev = Math.max(0.05, Math.min(1.3, dragStart.el + (e.clientY - dragStart.y) * 0.006));
+  updateCamera();
+});
+renderer.domElement.addEventListener('wheel', e => {
+  camDist = Math.max(5, Math.min(25, camDist + e.deltaY * 0.01));
+  updateCamera();
+  e.preventDefault();
+}, { passive:false });
+
+/* ---- 電車モデル（直方体本体＋台車。塗り絵は本体の6面のうち5面に対応） ---- */
+let trainGroup, bodyMesh, wheelsGroup;
+let faceTextures = {};
+
+function buildTrain(){
+  trainGroup = new THREE.Group();
+
+  // 面ごとの初期マテリアル（後でラッピングボタンでテクスチャ差し替え）
+  const matFor = id => new THREE.MeshStandardMaterial({ color:0xdfe3ea, roughness:0.55, metalness:0.05 });
+  // BoxGeometryのマテリアル配列順： +X, -X, +Y, -Y, +Z, -Z
+  const matRight = matFor('right');
+  const matLeft  = matFor('left');
+  const matTop   = matFor('top');
+  const matBottom= new THREE.MeshStandardMaterial({ color:0x33383f, roughness:0.8 });
+  const matFront = matFor('front');
+  const matBack  = matFor('back');
+
+  const bodyGeo = new THREE.BoxGeometry(TRAIN.width, TRAIN.height, TRAIN.length);
+  bodyMesh = new THREE.Mesh(bodyGeo, [matRight, matLeft, matTop, matBottom, matFront, matBack]);
+  bodyMesh.position.y = TRAIN.height/2 + 0.35;
+  trainGroup.add(bodyMesh);
+
+  faceTextures = { front: matFront, back: matBack, right: matRight, left: matLeft, top: matTop };
+
+  // 台車（車輪っぽい見た目、塗り絵対象外）
+  wheelsGroup = new THREE.Group();
+  const wheelMat = new THREE.MeshStandardMaterial({ color:0x24262b, roughness:0.5, metalness:0.4 });
+  const bogieMat = new THREE.MeshStandardMaterial({ color:0x2e3238, roughness:0.6 });
+  [-1.6, 1.6].forEach(bz => {
+    const bogie = new THREE.Mesh(new THREE.BoxGeometry(TRAIN.width*0.92, 0.22, 1.1), bogieMat);
+    bogie.position.set(0, 0.35, bz);
+    wheelsGroup.add(bogie);
+    [-1,1].forEach(sx => {
+      [-0.35, 0.35].forEach(wz => {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.26,0.12,20), wheelMat);
+        wheel.rotation.z = Math.PI/2;
+        wheel.position.set(sx * (TRAIN.width/2 - 0.02), 0.26, bz + wz);
+        wheelsGroup.add(wheel);
+      });
+    });
+  });
+  trainGroup.add(wheelsGroup);
+
+  scene.add(trainGroup);
+}
+buildTrain();
+
+/* ---- ラッピング（各面canvas -> CanvasTexture反映） ---- */
+function wrapTrain(){
+  FACES.forEach(f => {
+    const srcCanvas = state.faces[f.id].canvas;
+    const tex = new THREE.CanvasTexture(srcCanvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    // BoxGeometryのデフォルトUVは(0,0)が左下。canvasは上が0のため反転させる。
+    tex.flipY = true;
+    const mat = faceTextures[f.id];
+    if(mat){
+      mat.map = tex;
+      mat.color.set(0xffffff);
+      mat.needsUpdate = true;
+    }
+  });
+  toast('電車にラッピングしました！');
+  switchMode('scene');
+}
+document.getElementById('bWrap').onclick = wrapTrain;
+
+/* ---- 回転アニメーション ---- */
+let spinning = false;
+document.getElementById('bSpin').onclick = () => {
+  spinning = !spinning;
+  document.getElementById('bSpin').textContent = spinning ? '⏸ 回転を止める' : '▶ 回転する';
+  document.getElementById('bSpin').classList.toggle('on', spinning);
+};
+
+/* ---- 線路走行 ---- */
+// オーバル状のパス（半径a,b の楕円）
+const OVAL = { a: 8.5, b: 5.5, y: 0.35 };
+function ovalPoint(t){
+  const ang = t * Math.PI * 2;
+  return new THREE.Vector3(Math.sin(ang)*OVAL.a, OVAL.y, Math.cos(ang)*OVAL.b);
+}
+function ovalTangent(t){
+  const ang = t * Math.PI * 2;
+  const d = new THREE.Vector3(Math.cos(ang)*OVAL.a, 0, -Math.sin(ang)*OVAL.b);
+  return d.normalize();
+}
+
+// 線路の見た目（トーラス的な単純ラインで表現：細長いトーラスをスケール）
+const trackCurvePts = [];
+for(let i=0;i<=128;i++){ trackCurvePts.push(ovalPoint(i/128)); }
+const trackGeo = new THREE.BufferGeometry().setFromPoints(trackCurvePts);
+const trackLine = new THREE.LineLoop(trackGeo, new THREE.LineBasicMaterial({ color:0x556075 }));
+scene.add(trackLine);
+// 枕木風
+const sleeperGroup = new THREE.Group();
+for(let i=0;i<48;i++){
+  const t = i/48;
+  const pos = ovalPoint(t);
+  const tan = ovalTangent(t);
+  const sleeper = new THREE.Mesh(new THREE.BoxGeometry(1.3,0.06,0.22), new THREE.MeshStandardMaterial({color:0x4a3a28, roughness:0.9}));
+  sleeper.position.copy(pos);
+  sleeper.position.y = OVAL.y - 0.05;
+  sleeper.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI/2;
+  sleeperGroup.add(sleeper);
+}
+scene.add(sleeperGroup);
+
+let trackT = 0;
+let trackDir = 0; // -1,0,1
+let trackSpeed = 4;
+const speedRange = document.getElementById('speedRange');
+speedRange.oninput = () => { trackSpeed = +speedRange.value; };
+
+const bFwd = document.getElementById('bFwd');
+const bBack = document.getElementById('bBack');
+const bStop = document.getElementById('bStop');
+function setTrackDir(d){
+  trackDir = d;
+  bFwd.classList.toggle('on', d === 1);
+  bBack.classList.toggle('on', d === -1);
+  bStop.classList.toggle('on', d === 0);
+}
+bFwd.onclick = () => setTrackDir(1);
+bBack.onclick = () => setTrackDir(-1);
+bStop.onclick = () => setTrackDir(0);
+setTrackDir(0);
+
+function updateTrainOnTrack(dt){
+  if(trackDir !== 0){
+    trackT += trackDir * dt * (trackSpeed/2000);
+    trackT = ((trackT % 1) + 1) % 1;
+  }
+  const pos = ovalPoint(trackT);
+  const tan = ovalTangent(trackT);
+  trainGroup.position.set(pos.x, 0, pos.z);
+  let heading = Math.atan2(tan.x, tan.z);
+  if(trackDir === -1) heading += Math.PI;
+  trainGroup.rotation.y = heading;
+}
+
+/* ---- レンダーループ ---- */
+let lastTime = performance.now();
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = now - lastTime;
+  lastTime = now;
+
+  if(spinning){
+    trainGroup.rotation.y += dt * 0.001;
+  } else {
+    updateTrainOnTrack(dt);
+  }
+
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+
+/* ---- スクリーンショット ---- */
+document.getElementById('bShot').onclick = () => {
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g,'-');
+  a.href = url;
+  a.download = `train-${ts}.png`;
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('スクリーンショットを保存しました');
+};
+
+/* ============================================================
+   トースト
+   ============================================================ */
+let toastTimer = null;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 1800);
+}
+
+/* ============================================================
+   初期化
+   ============================================================ */
+initFaces();
+buildFaceRail();
+buildPresets();
+setColor(state.color);
+syncMainCanvas();
+resizeScene();
+
+</script>
+
+</body>
+</html>
