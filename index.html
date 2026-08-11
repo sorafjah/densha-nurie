@@ -318,8 +318,8 @@ const TRAIN = { width: 2.0, height: 2.3, length: 8.0 };
 
 // 線路まわりの寸法。車輪の位置決めにも使うので、車体と一緒に先に定義しておく
 // （後ろで const 宣言すると、車体生成時にまだ初期化されておらずエラーになる）
-const RAIL_GAUGE = 1.5;      // 2本のレールの間隔
-const RAIL_TOP_Y = 0.47;     // レール上面の高さ（車輪の接地面）
+const RAIL_GAUGE = 1.5;      // 2本のレールの間隔（テクスチャ上の見た目の間隔にも使う）
+const RAIL_TOP_Y = 0.04;     // 線路帯（テクスチャ）の高さ（車輪の接地面）
 const WHEEL_R = 0.3;         // 車輪の半径
 
 // 面定義：id, ラベル, キャンバス解像度（寸法比に対応）
@@ -991,48 +991,70 @@ function buildTrain(){
   bodyMesh.position.y = bodyBottom + TRAIN.height/2;
   const roofY = bodyBottom + TRAIN.height;
 
-  // パンタグラフ（菱形の骨組み＋集電舟）。屋根の後ろ寄りに1基置く
-  const pantoMat = new THREE.MeshStandardMaterial({ color:0x4a4f57, roughness:0.4, metalness:0.7 });
-  const panto = new THREE.Group();
-  panto.position.set(0, roofY, -TRAIN.length*0.22);
+  // パンタグラフ（「く」の字型の一本足＋横一本の集電舟）を前後に1基ずつ
+  const pantoFront = buildPantographUnit();
+  pantoFront.position.set(0, roofY, TRAIN.length*0.26);
+  trainGroup.add(pantoFront);
 
-  // 土台（碍子）
-  [-0.45, 0.45].forEach(px => {
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.12,8), pantoMat);
-    base.position.set(px, 0.06, 0);
-    panto.add(base);
-  });
-
-  // 下アーム（斜めに立ち上がる）／上アーム（頂点から前へ倒れる）
-  const armLen = 0.95, armR = 0.032;
-  function arm(x, y, z, rotX, len){
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(armR, armR, len, 6), pantoMat);
-    m.position.set(x, y, z);
-    m.rotation.x = rotX;
-    return m;
-  }
-  const topY = 0.85;
-  [-0.45, 0.45].forEach(px => {
-    // 下アーム：後ろ下から前上へ
-    panto.add(arm(px, 0.12 + Math.cos(0.9)*armLen/2, -0.35 + Math.sin(0.9)*armLen/2, 0.9, armLen));
-    // 上アーム：頂点から後ろ上へ
-    panto.add(arm(px, topY - Math.cos(0.75)*armLen/2, 0.25 - Math.sin(0.75)*armLen/2, -0.75, armLen));
-  });
-
-  // 集電舟（架線に触れる横棒）
-  const shoe = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.05, 0.16), pantoMat);
-  shoe.position.set(0, topY + 0.02, 0.1);
-  panto.add(shoe);
-  const shoeBar = new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,1.3,6), pantoMat);
-  shoeBar.rotation.z = Math.PI/2;
-  shoeBar.position.set(0, topY + 0.08, 0.1);
-  panto.add(shoeBar);
-
-  trainGroup.add(panto);
+  const pantoBack = buildPantographUnit();
+  pantoBack.position.set(0, roofY, -TRAIN.length*0.26);
+  pantoBack.rotation.y = Math.PI; // 「く」の開きが車両端の方を向くよう反転
+  trainGroup.add(pantoBack);
 
   scene.add(trainGroup);
 }
 buildTrain();
+
+// 2点を結ぶ円柱メッシュを作る（パンタグラフの腕など、斜めの棒に使う）
+function segmentMesh(p1, p2, radius, mat){
+  const dir = new THREE.Vector3().subVectors(p2, p1);
+  const len = dir.length();
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, len, 8), mat);
+  mesh.position.copy(p1).addScaledVector(dir, 0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+  return mesh;
+}
+
+// 「く」の字（一本足）パンタグラフを1基分作る。
+// 土台→折れ曲がる関節（肘）→集電舟、という2本の腕を左右対称に配置する。
+function buildPantographUnit(){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color:0x4a4f57, roughness:0.4, metalness:0.7 });
+  const armR = 0.03;
+  const sideXs = [-0.4, 0.4];
+  const baseH = 0.1;   // 碍子の高さ
+  const elbowY = 0.5, elbowZ = 0.4;  // 「く」の折れ目（肘）
+  const topY = 0.88, topZ = 0.02;    // 集電舟を支える先端
+
+  sideXs.forEach(x => {
+    // 碍子（土台の絶縁体）
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,baseH,8), mat);
+    base.position.set(x, baseH/2, 0);
+    g.add(base);
+
+    const p0 = new THREE.Vector3(x, baseH, 0);
+    const p1 = new THREE.Vector3(x, elbowY, elbowZ);
+    const p2 = new THREE.Vector3(x, topY, topZ);
+    g.add(segmentMesh(p0, p1, armR, mat));   // 下側の腕
+    g.add(segmentMesh(p1, p2, armR, mat));   // 上側の腕（ここで「く」に折れる）
+
+    const joint = new THREE.Mesh(new THREE.SphereGeometry(armR*1.4, 8, 8), mat);
+    joint.position.copy(p1);
+    g.add(joint);
+  });
+
+  // 集電舟（架線に触れる横一本の棒）
+  const shoeLen = Math.abs(sideXs[1] - sideXs[0]) + 0.3;
+  const shoeBar = new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028, shoeLen, 8), mat);
+  shoeBar.rotation.z = Math.PI/2;
+  shoeBar.position.set(0, topY + 0.03, topZ);
+  g.add(shoeBar);
+  const shoePad = new THREE.Mesh(new THREE.BoxGeometry(shoeLen*0.9, 0.04, 0.14), mat);
+  shoePad.position.set(0, topY + 0.06, topZ);
+  g.add(shoePad);
+
+  return g;
+}
 
 /* ---- ラッピング（各面canvas -> CanvasTexture反映） ----
    BoxGeometryの上面(+Y)は、UVのu軸が車体の「幅(X)」、v軸が「全長(Z)」に対応する。
@@ -1122,47 +1144,84 @@ function trackNormalAt(s){
   return new THREE.Vector3(t.z, 0, -t.x);
 }
 
-const trackGroup = new THREE.Group();
-const railMat = new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.35, metalness:0.7 });
-const sleeperMat = new THREE.MeshStandardMaterial({ color:0x6b4a30, roughness:0.9 });
+/* ---- 線路の見た目：解析的な形状にそのまま頂点を並べた帯（リボン）に、
+   線路柄のテクスチャを貼る方式。
+   （スプラインで曲線を近似する方式だと、直線とカーブの継ぎ目が
+   微妙に歪んだりズレたりしやすい。頂点を trackPointAt() から直接
+   取るこの方式なら、経路の形とぴったり一致する） ---- */
+const TRACK_WIDTH = RAIL_GAUGE + 0.9;  // 枕木がレール外側にはみ出す分を含めた帯の幅
+const TRACK_TILE_M = 1.1;              // テクスチャ1タイル分の長さ（枕木の間隔と合わせる）
 
-function buildRail(offset){
-  const pts = [];
-  const N = 400;
-  const railR = 0.06;
-  for(let i=0;i<N;i++){
+function buildTrackTexture(){
+  const tileW = 256, tileH = 128;
+  const cv = document.createElement('canvas');
+  cv.width = tileW; cv.height = tileH;
+  const c = cv.getContext('2d');
+
+  // バラスト（砂利）の下地
+  c.fillStyle = '#8c8378';
+  c.fillRect(0, 0, tileW, tileH);
+  for(let i=0; i<260; i++){
+    c.fillStyle = `rgba(0,0,0,${Math.random()*0.1})`;
+    c.beginPath();
+    c.arc(Math.random()*tileW, Math.random()*tileH, Math.random()*2+0.5, 0, Math.PI*2);
+    c.fill();
+  }
+
+  // 枕木（縦方向1タイルにつき1本、帯全体の幅いっぱいに）
+  c.fillStyle = '#6b4a30';
+  c.fillRect(0, tileH*0.4, tileW, tileH*0.18);
+  c.fillStyle = 'rgba(0,0,0,0.15)';
+  c.fillRect(0, tileH*0.4, tileW, tileH*0.03);
+
+  // レール（左右2本、縦方向にずっと伸びる金属の帯）
+  const gaugeFrac = RAIL_GAUGE / TRACK_WIDTH; // 帯の全幅に対するレール間隔の割合
+  const cx = tileW/2;
+  const railW = tileW*0.045;
+  [cx - tileW*gaugeFrac/2, cx + tileW*gaugeFrac/2].forEach(rx => {
+    c.fillStyle = '#a7adb5';
+    c.fillRect(rx - railW/2, 0, railW, tileH);
+    c.fillStyle = '#5f646c';
+    c.fillRect(rx - railW/2, 0, railW*0.3, tileH);
+  });
+
+  return cv;
+}
+
+const trackTex = new THREE.CanvasTexture(buildTrackTexture());
+trackTex.colorSpace = THREE.SRGBColorSpace;
+trackTex.wrapS = THREE.ClampToEdgeWrapping;
+trackTex.wrapT = THREE.RepeatWrapping;
+trackTex.repeat.set(1, TRACK_LEN / TRACK_TILE_M);
+
+function buildTrackMesh(){
+  const N = 800; // 帯の分割数（多いほど滑らか）
+  const half = TRACK_WIDTH/2;
+  const positions = [], uvs = [], indices = [];
+  for(let i=0; i<=N; i++){
     const s = (i/N) * TRACK_LEN;
     const p = trackPointAt(s);
     const n = trackNormalAt(s);
-    // チューブの中心を、上面が RAIL_TOP_Y になる高さに置く
-    pts.push(new THREE.Vector3(p.x + n.x*offset, RAIL_TOP_Y - railR, p.z + n.z*offset));
+    positions.push(
+      p.x - n.x*half, RAIL_TOP_Y, p.z - n.z*half,
+      p.x + n.x*half, RAIL_TOP_Y, p.z + n.z*half
+    );
+    const v = (i/N) * (TRACK_LEN/TRACK_TILE_M);
+    uvs.push(0, v, 1, v);
+    if(i < N){
+      const a = i*2, b = i*2+1, c2 = i*2+2, d = i*2+3;
+      indices.push(a,b,c2, b,d,c2);
+    }
   }
-  const curve = new THREE.CatmullRomCurve3(pts, true);
-  const geo = new THREE.TubeGeometry(curve, 600, railR, 8, true);
-  return new THREE.Mesh(geo, railMat);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ map:trackTex, roughness:0.9 });
+  return new THREE.Mesh(geo, mat);
 }
-trackGroup.add(buildRail(RAIL_GAUGE/2));
-trackGroup.add(buildRail(-RAIL_GAUGE/2));
-
-// 枕木：はしごの横木のように、2本のレールに対して垂直に等間隔で並べる。
-// 間隔を距離で決めることで、直線でもカーブでも同じ密度になる。
-const SLEEPER_SPACING = 1.1;  // 枕木の間隔（m）
-const SLEEPER_H = 0.1;
-const nSleepers = Math.round(TRACK_LEN / SLEEPER_SPACING);
-for(let i=0;i<nSleepers;i++){
-  const s = (i/nSleepers) * TRACK_LEN;
-  const pos = trackPointAt(s);
-  const tan = trackTangentAt(s);
-  // レールの外側まで少しはみ出す長さにすると、はしご状に見える
-  const sleeper = new THREE.Mesh(
-    new THREE.BoxGeometry(RAIL_GAUGE + 0.8, SLEEPER_H, 0.28),
-    sleeperMat
-  );
-  sleeper.position.set(pos.x, RAIL_TOP_Y - 0.12 - SLEEPER_H/2, pos.z);
-  sleeper.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI/2;
-  trackGroup.add(sleeper);
-}
-scene.add(trackGroup);
+scene.add(buildTrackMesh());
 
 /* ---- 背景の木（動いていることが分かりやすくなる目印） ---- */
 // 毎回同じ配置になるよう、乱数は固定シードの簡易生成器を使う
