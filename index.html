@@ -318,8 +318,8 @@ const TRAIN = { width: 2.0, height: 2.3, length: 8.0 };
 
 // 線路まわりの寸法。車輪の位置決めにも使うので、車体と一緒に先に定義しておく
 // （後ろで const 宣言すると、車体生成時にまだ初期化されておらずエラーになる）
-const RAIL_GAUGE = 1.5;      // 2本のレールの間隔（テクスチャ上の見た目の間隔にも使う）
-const RAIL_TOP_Y = 0.04;     // 線路帯（テクスチャ）の高さ（車輪の接地面）
+const RAIL_GAUGE = 1.5;      // 2本のレールの間隔
+const RAIL_TOP_Y = 0.13;     // レール上面の高さ（車輪の接地面）
 const WHEEL_R = 0.3;         // 車輪の半径
 
 // 面定義：id, ラベル, キャンバス解像度（寸法比に対応）
@@ -1144,46 +1144,40 @@ function trackNormalAt(s){
   return new THREE.Vector3(t.z, 0, -t.x);
 }
 
-/* ---- 線路の見た目：解析的な形状にそのまま頂点を並べた帯（リボン）に、
-   線路柄のテクスチャを貼る方式。
-   （スプラインで曲線を近似する方式だと、直線とカーブの継ぎ目が
-   微妙に歪んだりズレたりしやすい。頂点を trackPointAt() から直接
-   取るこの方式なら、経路の形とぴったり一致する） ---- */
-const TRACK_WIDTH = RAIL_GAUGE + 0.9;  // 枕木がレール外側にはみ出す分を含めた帯の幅
-const TRACK_TILE_M = 1.1;              // テクスチャ1タイル分の長さ（枕木の間隔と合わせる）
+/* ---- 線路の見た目 ----
+   経路の形（trackPointAt）から直接頂点を並べた「帯（リボン）」で作る。
+   ・道床＋枕木（はしごの横木）はテクスチャで表現した平らな帯
+   ・レール2本は、少し浮かせた細い帯を実際の3D形状として重ねる
+   こうすると経路とぴったり一致し、レールが光を受けて立体的に見える。 */
+const TRACK_WIDTH = RAIL_GAUGE + 1.0;  // 枕木がレール外側にはみ出す分を含めた帯の幅
+const TRACK_TILE_M = 1.0;              // テクスチャ1タイル分の長さ（＝枕木の間隔）
 
+// 道床＋枕木のテクスチャ（1タイル＝枕木1本ぶん）
 function buildTrackTexture(){
   const tileW = 256, tileH = 128;
   const cv = document.createElement('canvas');
   cv.width = tileW; cv.height = tileH;
   const c = cv.getContext('2d');
 
-  // バラスト（砂利）の下地
-  c.fillStyle = '#8c8378';
+  // 道床（砂利）
+  c.fillStyle = '#9a9086';
   c.fillRect(0, 0, tileW, tileH);
-  for(let i=0; i<260; i++){
-    c.fillStyle = `rgba(0,0,0,${Math.random()*0.1})`;
+  for(let i=0; i<400; i++){
+    const g = Math.random();
+    c.fillStyle = g < 0.5 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.10)';
     c.beginPath();
-    c.arc(Math.random()*tileW, Math.random()*tileH, Math.random()*2+0.5, 0, Math.PI*2);
+    c.arc(Math.random()*tileW, Math.random()*tileH, Math.random()*2.2+0.6, 0, Math.PI*2);
     c.fill();
   }
 
-  // 枕木（縦方向1タイルにつき1本、帯全体の幅いっぱいに）
+  // 枕木（はしごの横木）。帯の幅いっぱいに1本渡す
+  const tieTop = tileH*0.34, tieH = tileH*0.32;
   c.fillStyle = '#6b4a30';
-  c.fillRect(0, tileH*0.4, tileW, tileH*0.18);
-  c.fillStyle = 'rgba(0,0,0,0.15)';
-  c.fillRect(0, tileH*0.4, tileW, tileH*0.03);
-
-  // レール（左右2本、縦方向にずっと伸びる金属の帯）
-  const gaugeFrac = RAIL_GAUGE / TRACK_WIDTH; // 帯の全幅に対するレール間隔の割合
-  const cx = tileW/2;
-  const railW = tileW*0.045;
-  [cx - tileW*gaugeFrac/2, cx + tileW*gaugeFrac/2].forEach(rx => {
-    c.fillStyle = '#a7adb5';
-    c.fillRect(rx - railW/2, 0, railW, tileH);
-    c.fillStyle = '#5f646c';
-    c.fillRect(rx - railW/2, 0, railW*0.3, tileH);
-  });
+  c.fillRect(0, tieTop, tileW, tieH);
+  c.fillStyle = 'rgba(255,255,255,0.10)';        // 上面のハイライト
+  c.fillRect(0, tieTop, tileW, tieH*0.18);
+  c.fillStyle = 'rgba(0,0,0,0.28)';              // 下側の影
+  c.fillRect(0, tieTop + tieH*0.8, tileW, tieH*0.2);
 
   return cv;
 }
@@ -1192,25 +1186,30 @@ const trackTex = new THREE.CanvasTexture(buildTrackTexture());
 trackTex.colorSpace = THREE.SRGBColorSpace;
 trackTex.wrapS = THREE.ClampToEdgeWrapping;
 trackTex.wrapT = THREE.RepeatWrapping;
-trackTex.repeat.set(1, TRACK_LEN / TRACK_TILE_M);
+trackTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-function buildTrackMesh(){
-  const N = 800; // 帯の分割数（多いほど滑らか）
-  const half = TRACK_WIDTH/2;
+// 経路に沿った帯メッシュを作る共通関数。
+// offset: 経路中心からの左右のずれ / width: 帯の幅 / y: 高さ / vRepeat: UVの繰り返し数
+function buildRibbon(offset, width, y, material, vRepeat){
+  const N = 900;
+  const half = width/2;
   const positions = [], uvs = [], indices = [];
   for(let i=0; i<=N; i++){
     const s = (i/N) * TRACK_LEN;
     const p = trackPointAt(s);
     const n = trackNormalAt(s);
+    const cxp = p.x + n.x*offset, czp = p.z + n.z*offset;
     positions.push(
-      p.x - n.x*half, RAIL_TOP_Y, p.z - n.z*half,
-      p.x + n.x*half, RAIL_TOP_Y, p.z + n.z*half
+      cxp - n.x*half, y, czp - n.z*half,
+      cxp + n.x*half, y, czp + n.z*half
     );
-    const v = (i/N) * (TRACK_LEN/TRACK_TILE_M);
+    const v = (i/N) * (vRepeat || 1);
     uvs.push(0, v, 1, v);
     if(i < N){
-      const a = i*2, b = i*2+1, c2 = i*2+2, d = i*2+3;
-      indices.push(a,b,c2, b,d,c2);
+      const a = i*2, b = i*2+1, c = i*2+2, d = i*2+3;
+      // 面が上を向くよう (a, c, b) / (b, c, d) の順に並べる。
+      // (a, b, c) の順だと法線が下向きになり、上から見た時に描画されない。
+      indices.push(a, c, b,  b, c, d);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -1218,10 +1217,34 @@ function buildTrackMesh(){
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ map:trackTex, roughness:0.9 });
-  return new THREE.Mesh(geo, mat);
+  return new THREE.Mesh(geo, material);
 }
-scene.add(buildTrackMesh());
+
+const trackGroup = new THREE.Group();
+
+// ① 道床＋枕木（平らな帯）
+trackGroup.add(buildRibbon(
+  0, TRACK_WIDTH, 0.02,
+  new THREE.MeshStandardMaterial({ map:trackTex, roughness:0.95, side:THREE.DoubleSide }),
+  TRACK_LEN / TRACK_TILE_M
+));
+
+// ② レール2本（少し浮かせた細い帯＝はしごの縦棒）
+const railMat = new THREE.MeshStandardMaterial({
+  color:0xb9bfc7, roughness:0.3, metalness:0.75, side:THREE.DoubleSide
+});
+const railSideMat = new THREE.MeshStandardMaterial({
+  color:0x70767e, roughness:0.6, metalness:0.5, side:THREE.DoubleSide
+});
+[+1, -1].forEach(sign => {
+  const off = sign * RAIL_GAUGE/2;
+  // レール上面
+  trackGroup.add(buildRibbon(off, 0.14, RAIL_TOP_Y, railMat, 1));
+  // レール側面（薄い影の帯を少し下に置いて、厚みがあるように見せる）
+  trackGroup.add(buildRibbon(off, 0.19, RAIL_TOP_Y - 0.045, railSideMat, 1));
+});
+
+scene.add(trackGroup);
 
 /* ---- 背景の木（動いていることが分かりやすくなる目印） ---- */
 // 毎回同じ配置になるよう、乱数は固定シードの簡易生成器を使う
