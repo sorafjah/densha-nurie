@@ -290,7 +290,7 @@
     </div>
     <div class="row">
       <span class="glabel">速度</span>
-      <input type="range" id="speedRange" min="1" max="10" value="3">
+      <input type="range" id="speedRange" min="1" max="9" value="5">
     </div>
     <div class="row">
       <button class="pillBtn" id="bShot">📷 スクリーンショット</button>
@@ -808,7 +808,7 @@ function switchMode(mode){
 const sceneHost = document.getElementById('sceneHost');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8fd0f0);
-scene.fog = new THREE.Fog(0x8fd0f0, 30, 70);
+scene.fog = new THREE.Fog(0x8fd0f0, 70, 190);
 
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
 camera.position.set(7, 5, 9);
@@ -827,7 +827,7 @@ dl2.position.set(-6, 3, -4);
 scene.add(dl2);
 
 const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(40, 48),
+  new THREE.CircleGeometry(90, 56),
   new THREE.MeshStandardMaterial({ color:0x5fb865, roughness:1 })
 );
 ground.rotation.x = -Math.PI/2;
@@ -845,7 +845,8 @@ function resizeScene(){
 new ResizeObserver(resizeScene).observe(sceneHost);
 
 /* ---- 簡易オービットカメラ（マウスドラッグで周回） ---- */
-let camAngle = 0.7, camElev = 0.42, camDist = 16;
+let camAngle = 0.7, camElev = 0.42, camDist = 26;
+const CAM_MIN = 6, CAM_MAX = 90;
 // カメラの注視点。走行中は電車を追いかけ、回転モードでは原点付近を見る。
 const camTarget = new THREE.Vector3(0, 1.8, 0);
 function updateCamera(){
@@ -857,8 +858,18 @@ function updateCamera(){
   camera.lookAt(camTarget);
 }
 updateCamera();
+function setCamDist(d){
+  camDist = Math.max(CAM_MIN, Math.min(CAM_MAX, d));
+  updateCamera();
+}
+
+/* ---- マウス：ドラッグで回転 / ホイールでズーム ---- */
 let dragCam = false, dragStart = null;
-renderer.domElement.addEventListener('pointerdown', e => { dragCam = true; dragStart = {x:e.clientX,y:e.clientY,a:camAngle,el:camElev}; });
+renderer.domElement.addEventListener('pointerdown', e => {
+  if(e.pointerType === 'touch') return;   // タッチは下の専用処理に任せる
+  dragCam = true;
+  dragStart = {x:e.clientX, y:e.clientY, a:camAngle, el:camElev};
+});
 window.addEventListener('pointerup', () => dragCam = false);
 window.addEventListener('pointermove', e => {
   if(!dragCam) return;
@@ -867,10 +878,53 @@ window.addEventListener('pointermove', e => {
   updateCamera();
 });
 renderer.domElement.addEventListener('wheel', e => {
-  camDist = Math.max(5, Math.min(40, camDist + e.deltaY * 0.01));
-  updateCamera();
+  setCamDist(camDist + e.deltaY * 0.02);
   e.preventDefault();
 }, { passive:false });
+
+/* ---- タッチ：1本指で回転 / 2本指のピンチで拡大縮小 ---- */
+let touchMode = null;       // 'rotate' | 'pinch'
+let touchStart = null;
+function touchDist(t){
+  return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+}
+renderer.domElement.addEventListener('touchstart', e => {
+  const t = e.touches;
+  if(t.length === 1){
+    touchMode = 'rotate';
+    touchStart = { x:t[0].clientX, y:t[0].clientY, a:camAngle, el:camElev };
+  } else if(t.length >= 2){
+    touchMode = 'pinch';
+    touchStart = { d: touchDist(t), dist: camDist };
+  }
+  e.preventDefault();
+}, { passive:false });
+
+renderer.domElement.addEventListener('touchmove', e => {
+  const t = e.touches;
+  if(touchMode === 'pinch' && t.length >= 2){
+    const d = touchDist(t);
+    if(touchStart.d > 0){
+      // 指を広げた分だけ近づく（＝拡大）
+      setCamDist(touchStart.dist * (touchStart.d / d));
+    }
+  } else if(touchMode === 'rotate' && t.length === 1){
+    camAngle = touchStart.a - (t[0].clientX - touchStart.x) * 0.008;
+    camElev = Math.max(0.05, Math.min(1.3, touchStart.el + (t[0].clientY - touchStart.y) * 0.006));
+    updateCamera();
+  }
+  e.preventDefault();
+}, { passive:false });
+
+renderer.domElement.addEventListener('touchend', e => {
+  if(e.touches.length === 0){
+    touchMode = null;
+  } else if(e.touches.length === 1){
+    // 2本指→1本指に減った時は、回転の基準を取り直す
+    touchMode = 'rotate';
+    touchStart = { x:e.touches[0].clientX, y:e.touches[0].clientY, a:camAngle, el:camElev };
+  }
+});
 
 /* ---- 電車モデル（直方体本体＋台車。塗り絵は本体の6面のうち5面に対応） ---- */
 let trainGroup, bodyMesh, wheelsGroup;
@@ -935,24 +989,79 @@ function buildTrain(){
 
   // 車体をスカートの上に載せ直す
   bodyMesh.position.y = bodyBottom + TRAIN.height/2;
+  const roofY = bodyBottom + TRAIN.height;
+
+  // パンタグラフ（菱形の骨組み＋集電舟）。屋根の後ろ寄りに1基置く
+  const pantoMat = new THREE.MeshStandardMaterial({ color:0x4a4f57, roughness:0.4, metalness:0.7 });
+  const panto = new THREE.Group();
+  panto.position.set(0, roofY, -TRAIN.length*0.22);
+
+  // 土台（碍子）
+  [-0.45, 0.45].forEach(px => {
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.12,8), pantoMat);
+    base.position.set(px, 0.06, 0);
+    panto.add(base);
+  });
+
+  // 下アーム（斜めに立ち上がる）／上アーム（頂点から前へ倒れる）
+  const armLen = 0.95, armR = 0.032;
+  function arm(x, y, z, rotX, len){
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(armR, armR, len, 6), pantoMat);
+    m.position.set(x, y, z);
+    m.rotation.x = rotX;
+    return m;
+  }
+  const topY = 0.85;
+  [-0.45, 0.45].forEach(px => {
+    // 下アーム：後ろ下から前上へ
+    panto.add(arm(px, 0.12 + Math.cos(0.9)*armLen/2, -0.35 + Math.sin(0.9)*armLen/2, 0.9, armLen));
+    // 上アーム：頂点から後ろ上へ
+    panto.add(arm(px, topY - Math.cos(0.75)*armLen/2, 0.25 - Math.sin(0.75)*armLen/2, -0.75, armLen));
+  });
+
+  // 集電舟（架線に触れる横棒）
+  const shoe = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.05, 0.16), pantoMat);
+  shoe.position.set(0, topY + 0.02, 0.1);
+  panto.add(shoe);
+  const shoeBar = new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,1.3,6), pantoMat);
+  shoeBar.rotation.z = Math.PI/2;
+  shoeBar.position.set(0, topY + 0.08, 0.1);
+  panto.add(shoeBar);
+
+  trainGroup.add(panto);
 
   scene.add(trainGroup);
 }
 buildTrain();
 
-/* ---- ラッピング（各面canvas -> CanvasTexture反映） ---- */
+/* ---- ラッピング（各面canvas -> CanvasTexture反映） ----
+   BoxGeometryの上面(+Y)は、UVのu軸が車体の「幅(X)」、v軸が「全長(Z)」に対応する。
+   一方、天井のぬりえキャンバスは横長（横=全長）で描いてもらっているため、
+   そのまま貼ると90度ズレる。天井だけ、回転させたキャンバスを作ってから貼る。 */
+function makeTopCanvas(src){
+  const out = document.createElement('canvas');
+  out.width = src.height;   // 幅(X)方向
+  out.height = src.width;   // 全長(Z)方向
+  const c = out.getContext('2d');
+  // 元キャンバスの左端（＝電車の前方）が、貼った時に前方(+Z)に来るように回す
+  c.translate(out.width, 0);
+  c.rotate(Math.PI/2);
+  c.drawImage(src, 0, 0);
+  return out;
+}
+
 function wrapTrain(){
   FACES.forEach(f => {
-    const srcCanvas = state.faces[f.id].canvas;
+    let srcCanvas = state.faces[f.id].canvas;
+    if(f.id === 'top') srcCanvas = makeTopCanvas(srcCanvas);
     const tex = new THREE.CanvasTexture(srcCanvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.needsUpdate = true;
     tex.wrapS = THREE.ClampToEdgeWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
-    // BoxGeometryのデフォルトUVは(0,0)が左下。canvasは上が0のため反転させる。
-    tex.flipY = true;
     const mat = faceTextures[f.id];
     if(mat){
+      if(mat.map) mat.map.dispose();
       mat.map = tex;
       mat.color.set(0xffffff);
       mat.needsUpdate = true;
@@ -972,64 +1081,145 @@ document.getElementById('bSpin').onclick = () => {
 };
 
 /* ---- 線路走行 ---- */
-// オーバル状のパス（半径a,b の楕円）
-const OVAL = { a: 14, b: 9.5, y: 0.35 };
-function ovalPoint(t){
-  const ang = t * Math.PI * 2;
-  return new THREE.Vector3(Math.sin(ang)*OVAL.a, OVAL.y, Math.cos(ang)*OVAL.b);
-}
-function ovalTangent(t){
-  const ang = t * Math.PI * 2;
-  const d = new THREE.Vector3(Math.cos(ang)*OVAL.a, 0, -Math.sin(ang)*OVAL.b);
-  return d.normalize();
-}
-function ovalNormalXZ(t){
-  // 進行方向に対して右手方向（レール幅を出すためのオフセット用）
-  const tan = ovalTangent(t);
-  return new THREE.Vector3(tan.z, 0, -tan.x);
+/* ---- 線路（直線区間＋半円カーブの「オーバル」） ----
+   楕円だと直線部分が無く常に曲がり続けるため、
+   直線 L と半径 R の半円を組み合わせた陸上トラック型にする。
+   距離（メートル）で位置を求められるので、速度をそのまま m/s で扱える。 */
+const TRACK = { R: 13, L: 26, y: RAIL_TOP_Y };   // R:カーブ半径 / L:直線の長さ
+const TRACK_LEN = 2*TRACK.L + 2*Math.PI*TRACK.R; // 一周の距離
+
+// 距離 s（0〜TRACK_LEN）から位置を求める
+function trackPointAt(s){
+  const { R, L } = TRACK;
+  s = ((s % TRACK_LEN) + TRACK_LEN) % TRACK_LEN;
+  const arc = Math.PI * R;
+  if(s < L){                       // ① 直線A：x=+R を -Z→+Z
+    return new THREE.Vector3(R, 0, -L/2 + s);
+  }
+  s -= L;
+  if(s < arc){                     // ② カーブA：+Z 側の半円
+    const th = s / R;
+    return new THREE.Vector3(Math.cos(th)*R, 0, L/2 + Math.sin(th)*R);
+  }
+  s -= arc;
+  if(s < L){                       // ③ 直線B：x=-R を +Z→-Z
+    return new THREE.Vector3(-R, 0, L/2 - s);
+  }
+  s -= L;                          // ④ カーブB：-Z 側の半円
+  const th = Math.PI + s / R;
+  return new THREE.Vector3(Math.cos(th)*R, 0, -L/2 + Math.sin(th)*R);
 }
 
-// 線路の見た目：2本のレール（チューブ状）＋等間隔の枕木
+// 進行方向（単位ベクトル）。微小差分で求める
+function trackTangentAt(s){
+  const d = 0.05;
+  const a = trackPointAt(s - d), b = trackPointAt(s + d);
+  return b.sub(a).normalize();
+}
+// 進行方向に対して右手方向（レール幅を出すためのオフセット用）
+function trackNormalAt(s){
+  const t = trackTangentAt(s);
+  return new THREE.Vector3(t.z, 0, -t.x);
+}
+
 const trackGroup = new THREE.Group();
 const railMat = new THREE.MeshStandardMaterial({ color:0x9aa0a8, roughness:0.35, metalness:0.7 });
 const sleeperMat = new THREE.MeshStandardMaterial({ color:0x6b4a30, roughness:0.9 });
-const ballastMat = new THREE.MeshStandardMaterial({ color:0x8c8378, roughness:1 });
 
 function buildRail(offset){
   const pts = [];
-  const N = 200;
+  const N = 400;
   const railR = 0.06;
   for(let i=0;i<N;i++){
-    const t = i/N;
-    const p = ovalPoint(t);
-    const n = ovalNormalXZ(t);
+    const s = (i/N) * TRACK_LEN;
+    const p = trackPointAt(s);
+    const n = trackNormalAt(s);
     // チューブの中心を、上面が RAIL_TOP_Y になる高さに置く
     pts.push(new THREE.Vector3(p.x + n.x*offset, RAIL_TOP_Y - railR, p.z + n.z*offset));
   }
   const curve = new THREE.CatmullRomCurve3(pts, true);
-  const geo = new THREE.TubeGeometry(curve, 400, railR, 8, true);
+  const geo = new THREE.TubeGeometry(curve, 600, railR, 8, true);
   return new THREE.Mesh(geo, railMat);
 }
 trackGroup.add(buildRail(RAIL_GAUGE/2));
 trackGroup.add(buildRail(-RAIL_GAUGE/2));
 
-// 枕木（線路の進行方向に対して垂直に並べる板）。レールのすぐ下に敷く
-const SLEEPER_H = 0.12;
-const N_SLEEPERS = 120;
-for(let i=0;i<N_SLEEPERS;i++){
-  const t = i/N_SLEEPERS;
-  const pos = ovalPoint(t);
-  const tan = ovalTangent(t);
-  const sleeper = new THREE.Mesh(new THREE.BoxGeometry(RAIL_GAUGE + 0.7, SLEEPER_H, 0.32), sleeperMat);
+// 枕木：はしごの横木のように、2本のレールに対して垂直に等間隔で並べる。
+// 間隔を距離で決めることで、直線でもカーブでも同じ密度になる。
+const SLEEPER_SPACING = 1.1;  // 枕木の間隔（m）
+const SLEEPER_H = 0.1;
+const nSleepers = Math.round(TRACK_LEN / SLEEPER_SPACING);
+for(let i=0;i<nSleepers;i++){
+  const s = (i/nSleepers) * TRACK_LEN;
+  const pos = trackPointAt(s);
+  const tan = trackTangentAt(s);
+  // レールの外側まで少しはみ出す長さにすると、はしご状に見える
+  const sleeper = new THREE.Mesh(
+    new THREE.BoxGeometry(RAIL_GAUGE + 0.8, SLEEPER_H, 0.28),
+    sleeperMat
+  );
   sleeper.position.set(pos.x, RAIL_TOP_Y - 0.12 - SLEEPER_H/2, pos.z);
   sleeper.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI/2;
   trackGroup.add(sleeper);
 }
 scene.add(trackGroup);
 
-let trackT = 0;
-let trackDir = 0; // -1,0,1
-let trackSpeed = 3;
+/* ---- 背景の木（動いていることが分かりやすくなる目印） ---- */
+// 毎回同じ配置になるよう、乱数は固定シードの簡易生成器を使う
+function makeRandom(seed){
+  let s = seed;
+  return () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
+}
+
+function makeTree(scale){
+  const tree = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.22, 1.4, 7),
+    new THREE.MeshStandardMaterial({ color:0x7a5433, roughness:0.95 })
+  );
+  trunk.position.y = 0.7;
+  tree.add(trunk);
+  // 葉を3段の円錐にして、もこもこした木にする
+  const leafMat = new THREE.MeshStandardMaterial({ color:0x2f8f43, roughness:0.9 });
+  [[1.5, 1.15, 1.5], [2.3, 0.95, 1.3], [3.0, 0.7, 1.0]].forEach(([y, r, h]) => {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h*1.6, 8), leafMat);
+    cone.position.y = y;
+    tree.add(cone);
+  });
+  tree.scale.setScalar(scale);
+  return tree;
+}
+
+const treeGroup = new THREE.Group();
+const rnd = makeRandom(20260811);
+const TREE_COUNT = 90;
+let placed = 0, tries = 0;
+while(placed < TREE_COUNT && tries < 3000){
+  tries++;
+  const x = (rnd()*2 - 1) * 75;
+  const z = (rnd()*2 - 1) * 75;
+  // 線路に近すぎる場所には置かない（軌道上や内側の見通しを塞がないため）
+  const insideOval =
+    Math.abs(x) < TRACK.R + 4 && Math.abs(z) < TRACK.L/2 + TRACK.R + 4;
+  const nearRail = Math.hypot(
+    Math.max(0, Math.abs(x) - TRACK.R),
+    Math.max(0, Math.abs(z) - TRACK.L/2)
+  );
+  if(insideOval) continue;
+  if(nearRail < 5) continue;
+  if(Math.hypot(x, z) > 80) continue;
+
+  const tree = makeTree(0.9 + rnd()*0.9);
+  tree.position.set(x, 0, z);
+  tree.rotation.y = rnd() * Math.PI * 2;
+  treeGroup.add(tree);
+  placed++;
+}
+scene.add(treeGroup);
+
+let trackS = 0;          // 一周のうち何メートル進んだか
+let trackDir = 0;        // -1,0,1
+let trackSpeed = 5;      // m/s（スライダーの中央）
 const speedRange = document.getElementById('speedRange');
 speedRange.oninput = () => { trackSpeed = +speedRange.value; };
 
@@ -1049,13 +1239,13 @@ setTrackDir(0);
 
 function updateTrainOnTrack(dt){
   if(trackDir !== 0){
-    // 係数を大きくし、オーバル一周がゆったりした時間になるよう調整
-    // （速度4で一周およそ40秒程度）
-    trackT += trackDir * dt * (trackSpeed/160000);
-    trackT = ((trackT % 1) + 1) % 1;
+    // trackS は「一周の距離のうち何メートル進んだか」。
+    // trackSpeed をそのまま m/s として使えるので、速度の感覚がつかみやすい。
+    trackS += trackDir * (dt/1000) * trackSpeed;
+    trackS = ((trackS % TRACK_LEN) + TRACK_LEN) % TRACK_LEN;
   }
-  const pos = ovalPoint(trackT);
-  const tan = ovalTangent(trackT);
+  const pos = trackPointAt(trackS);
+  const tan = trackTangentAt(trackS);
   trainGroup.position.set(pos.x, 0, pos.z);
   let heading = Math.atan2(tan.x, tan.z);
   if(trackDir === -1) heading += Math.PI;
@@ -1085,15 +1275,33 @@ function animate(now){
 }
 requestAnimationFrame(animate);
 
-/* ---- スクリーンショット ---- */
-document.getElementById('bShot').onclick = () => {
+/* ---- スクリーンショット ----
+   iPhoneのSafariはダウンロードリンクだと「ファイル」アプリ行きか新規タブ表示になり
+   分かりにくいため、共有シート（写真に保存が選べる）が使える端末ではそちらを優先する。 */
+document.getElementById('bShot').onclick = async () => {
   renderer.render(scene, camera);
-  const url = renderer.domElement.toDataURL('image/png');
+  const name = `train-${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.png`;
+
+  const blob = await new Promise(res => renderer.domElement.toBlob(res, 'image/png'));
+  if(!blob){ toast('画像の作成に失敗しました'); return; }
+
+  const file = new File([blob], name, { type:'image/png' });
+  if(navigator.canShare && navigator.canShare({ files:[file] })){
+    try{
+      await navigator.share({ files:[file] });
+      return;
+    }catch(err){
+      if(err && err.name === 'AbortError') return;  // ユーザーが共有をキャンセルした
+      // 共有に失敗した場合は、下のダウンロード方式にそのまま進む
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const ts = new Date().toISOString().replace(/[:.]/g,'-');
   a.href = url;
-  a.download = `train-${ts}.png`;
+  a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
   toast('スクリーンショットを保存しました');
 };
 
