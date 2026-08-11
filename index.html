@@ -140,8 +140,9 @@
 
   /* ===== 3D画面 ===== */
   #sceneView{position:relative;}
-  #sceneHost{flex:1; position:relative;}
-  #sceneHost canvas{display:block;}
+  #sceneHost{flex:1; position:relative; min-width:0;}
+  /* touch-action:none でスワイプがページスクロールに奪われず、視点回転に使える */
+  #sceneHost canvas{display:block; width:100%; height:100%; touch-action:none;}
   #sceneControls{
     position:absolute; left:14px; bottom:14px; display:flex; flex-direction:column; gap:10px;
     background:#1c2028cc; backdrop-filter:blur(6px); border:1px solid var(--line);
@@ -167,6 +168,48 @@
   #loadingScene{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:var(--dim); font-size:13px;
+  }
+
+  /* ===== スマホ向け ===== */
+  /* ボタン内の文字が縦に潰れないよう、どの幅でも折り返しを禁止する */
+  button, .pillBtn, .plain, .wrapBtn, .modeTabs button{ white-space:nowrap; }
+
+  @media (max-width: 780px){
+    header{padding:8px 10px; gap:8px; overflow-x:auto;}
+    header h1{font-size:13px; margin:0;}
+    header h1 .dot{width:7px;height:7px;}
+    .modeTabs button{padding:6px 10px; font-size:12px;}
+    .wrapBtn{padding:8px 12px; font-size:12px;}
+
+    /* 塗り絵：面リストを上部の横スクロールに変更して、描画領域を広く取る */
+    #paintView{flex-direction:column;}
+    #faceRail{
+      flex:0 0 auto; width:100%; border-right:none; border-bottom:1px solid var(--line);
+      padding:8px; overflow-x:auto; overflow-y:hidden;
+    }
+    #faceRail .lbl{display:none;}
+    #faceList{display:flex; gap:8px;}
+    .faceBtn{width:84px; flex:0 0 auto; margin-bottom:0; padding:6px 4px;}
+    .faceBtn .fdim{display:none;}
+    .faceBtn .fname{font-size:11px;}
+
+    #canvasHost{padding:10px;}
+    #toolbar{padding:8px 10px; gap:10px; overflow-x:auto;}
+    .toolGroup{flex:0 0 auto;}
+    .toolBtn{width:34px;height:34px;font-size:15px;}
+    input[type=range]{width:70px;}
+    .swatch{width:22px;height:22px;}
+    #presetRow{flex-wrap:nowrap; overflow-x:auto; max-width:150px;}
+    button.plain{padding:7px 10px; font-size:12px;}
+
+    /* 3D：操作パネルを画面下に横並びで固定 */
+    #sceneControls{
+      left:8px; right:8px; bottom:8px; padding:10px;
+      flex-direction:row; flex-wrap:wrap; gap:8px; align-items:center;
+    }
+    #sceneControls .glabel{width:auto;}
+    .pillBtn{padding:7px 11px; font-size:12px;}
+    #speedRange{width:80px;}
   }
 </style>
 </head>
@@ -311,14 +354,12 @@ function drawGuide(id, ctx, w, h){
     const winW = w*0.5, winH = h*0.3;
     roundRectStroke(ctx, (w-winW)/2, h*0.1, winW, winH, RES*0.1);
 
-    // 車体の横帯（2本、電車らしいライン）
-    const stripeYs = [h*0.55, h*0.62];
-    stripeYs.forEach(sy => {
-      ctx.beginPath();
-      ctx.moveTo(w*0.06, sy);
-      ctx.lineTo(w*0.94, sy);
-      ctx.stroke();
-    });
+    // 車体の横帯（長方形。中を塗りつぶせばラインカラーになる）
+    const bandX = w*0.06;
+    const bandY = h*0.55;
+    const bandW = w*0.88;
+    const bandH = h*0.09;
+    ctx.strokeRect(bandX, bandY, bandW, bandH);
 
     // ヘッドライト（左右2つの丸）
     const lightR = Math.min(w,h)*0.05;
@@ -452,8 +493,11 @@ function syncMainCanvas(){
   const f = state.faces[state.faceId];
   mainCanvas.width = f.canvas.width;
   mainCanvas.height = f.canvas.height;
-  // 画面上の表示サイズ（縦横比維持、大きめに表示）
-  const maxW = 640, maxH = 460;
+  // 画面上の表示サイズ（縦横比を保ったまま、表示領域いっぱいに広げる）
+  const host = document.getElementById('canvasHost');
+  const pad = 28;
+  const maxW = Math.max(160, (host.clientWidth || 640) - pad);
+  const maxH = Math.max(140, (host.clientHeight || 460) - pad);
   const scale = Math.min(maxW / f.canvas.width, maxH / f.canvas.height, 3);
   mainCanvas.style.width = (f.canvas.width * scale) + 'px';
   mainCanvas.style.height = (f.canvas.height * scale) + 'px';
@@ -742,7 +786,14 @@ function switchMode(mode){
   sceneView.classList.toggle('on', mode === 'scene');
   tabPaint.classList.toggle('on', mode === 'paint');
   tabScene.classList.toggle('on', mode === 'scene');
-  if(mode === 'scene') requestAnimationFrame(resizeScene);
+  if(mode === 'scene'){
+    // 表示直後はレイアウト確定が遅れることがあるため、数回に分けて再計測する
+    requestAnimationFrame(resizeScene);
+    setTimeout(resizeScene, 60);
+    setTimeout(resizeScene, 250);
+  } else {
+    setTimeout(handleHostResize, 60);
+  }
 }
 
 /* ============================================================
@@ -780,7 +831,9 @@ scene.add(grid);
 function resizeScene(){
   const w = sceneHost.clientWidth, h = sceneHost.clientHeight;
   if(w===0||h===0) return;
-  renderer.setSize(w, h, false);
+  // 第3引数を省略（=true）にして、canvasのCSSサイズも表示領域に合わせる。
+  // false にすると DPR 倍の実寸のまま配置され、左上の一部しか見えなくなる。
+  renderer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -788,13 +841,15 @@ new ResizeObserver(resizeScene).observe(sceneHost);
 
 /* ---- 簡易オービットカメラ（マウスドラッグで周回） ---- */
 let camAngle = 0.7, camElev = 0.42, camDist = 11.5;
+// カメラの注視点。走行中は電車を追いかけ、回転モードでは原点付近を見る。
+const camTarget = new THREE.Vector3(0, 1, 0);
 function updateCamera(){
   camera.position.set(
-    Math.sin(camAngle)*camDist*Math.cos(camElev),
-    Math.sin(camElev)*camDist + 1.2,
-    Math.cos(camAngle)*camDist*Math.cos(camElev)
+    camTarget.x + Math.sin(camAngle)*camDist*Math.cos(camElev),
+    camTarget.y + Math.sin(camElev)*camDist,
+    camTarget.z + Math.cos(camAngle)*camDist*Math.cos(camElev)
   );
-  camera.lookAt(0, 1, 0);
+  camera.lookAt(camTarget);
 }
 updateCamera();
 let dragCam = false, dragStart = null;
@@ -964,10 +1019,16 @@ function animate(now){
   lastTime = now;
 
   if(spinning){
+    // 回転モード：電車はレール中央に留めて、その場でくるくる回す
+    trainGroup.position.set(0, 0, 0);
     trainGroup.rotation.y += dt * 0.001;
+    camTarget.lerp(new THREE.Vector3(0, 1, 0), 0.05);
   } else {
     updateTrainOnTrack(dt);
+    // 走行中はカメラが電車をゆるやかに追いかける
+    camTarget.lerp(new THREE.Vector3(trainGroup.position.x, 1, trainGroup.position.z), 0.05);
   }
+  updateCamera();
 
   renderer.render(scene, camera);
 }
@@ -1006,6 +1067,20 @@ buildPresets();
 setColor(state.color);
 syncMainCanvas();
 resizeScene();
+
+// 画面回転・リサイズ時に、描画中の内容を保ったまま表示サイズだけ再計算する。
+// syncMainCanvas 自体が canvas の表示サイズを変えるため、監視をそのまま繋ぐと
+// 再帰的に発火し続ける。実際に領域サイズが変わった時だけ走らせる。
+const hostEl = document.getElementById('canvasHost');
+let lastHostSize = '';
+function handleHostResize(){
+  const key = hostEl.clientWidth + 'x' + hostEl.clientHeight;
+  if(key === lastHostSize) return;
+  lastHostSize = key;
+  if(!imgPlacing) syncMainCanvas();
+}
+window.addEventListener('resize', () => { handleHostResize(); resizeScene(); });
+new ResizeObserver(handleHostResize).observe(hostEl);
 
 </script>
 
