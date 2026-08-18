@@ -43,22 +43,28 @@
     display:flex; flex-direction:column;
     overflow:hidden;
   }
-  /* 上部バーは空と同じ水色、ボタンは薄い黄緑 */
-  header{
-    flex:0 0 auto; background:#8fd0f0;
-    padding:10px 16px; display:flex; align-items:center; gap:14px; color:#1c3d4d;
+
+  /* ヘッダーは廃止し、モード切替と使い方を右下のフローティングパネルにまとめる。
+     画面全体を編集領域として広く使えるようにするため。 */
+  #modeFloat{
+    position:fixed; right:14px; bottom:78px; z-index:50;
+    display:flex; align-items:center; gap:8px;
+    background:#ffffff; border:1px solid #d8e6c8; border-radius:26px;
+    padding:6px; box-shadow:0 4px 16px rgba(30,60,40,0.18);
+    transition:bottom .15s ease;
   }
-  header h1{
-    font-size:16px; margin:0; font-weight:800; letter-spacing:.02em;
-    color:#1c3d4d;
-  }
-  .modeTabs{display:flex; gap:8px; background:transparent; padding:3px;}
+  /* 3D画面にはツールバーが無いので、画面端に近い位置まで下げる */
+  #modeFloat.scene-mode{ bottom:14px; }
+  .modeTabs{display:flex; gap:6px; background:transparent;}
   .modeTabs button{
     border:1px solid #b9dd8e; background:#ffffff; color:#33452a; font-weight:700; font-size:13px;
-    padding:7px 16px; border-radius:6px; cursor:pointer; font-family:inherit;
+    padding:8px 16px; border-radius:20px; cursor:pointer; font-family:inherit;
   }
   .modeTabs button.on{background:#8fce5a; border-color:#8fce5a; color:#20330f;}
-  header .sp{flex:1;}
+  #modeFloat #bHowto{
+    border-radius:50%; width:38px; height:38px; padding:0;
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+  }
 
   #paintView, #sceneView{flex:1 1 auto; min-height:0; display:none;}
   #paintView.on, #sceneView.on{display:flex;}
@@ -160,7 +166,7 @@
      画面全体を薄暗くしつつ、ツールバーの真上（キャンバスとは重ならない位置）に
      横幅いっぱいの帯として固定表示する */
   #imgAdjustOverlay{
-    display:none; position:absolute; inset:0; background:rgba(20,30,25,0.35);
+    display:none; position:absolute; inset:0; background:rgba(20,30,25,0.1);
     z-index:4; pointer-events:none;
   }
   #imgAdjustOverlay.on{display:block;}
@@ -279,9 +285,9 @@
   button, .pillBtn, .plain, .modeTabs button{ white-space:nowrap; }
 
   @media (max-width: 780px){
-    header{padding:8px 10px; gap:8px; overflow-x:auto;}
-    header h1{font-size:13px; margin:0;}
-    /* header h1 .dot は廃止 */
+    /* header は廃止 */
+    #modeFloat{right:10px; bottom:70px; padding:5px;}
+    #modeFloat.scene-mode{bottom:10px;}
     .modeTabs button{padding:6px 10px; font-size:12px;}
     /* .wrapBtnは廃止 */
 
@@ -322,14 +328,13 @@
 </head>
 <body>
 
-<header>
+<div id="modeFloat">
   <div class="modeTabs">
     <button id="tabPaint" class="on">ぬりえ</button>
     <button id="tabScene">3Dプレビュー</button>
   </div>
-  <span class="sp"></span>
-  <button class="pillBtn" id="bHowto" style="background:#ffffff; border-color:#b9dd8e; color:#33452a;">❔ 使い方</button>
-</header>
+  <button class="pillBtn" id="bHowto" style="background:#ffffff; border-color:#b9dd8e; color:#33452a;">❔</button>
+</div>
 
 <div id="paintView" class="on">
   <div id="faceRail">
@@ -948,6 +953,7 @@ function switchMode(mode){
   sceneView.classList.toggle('on', mode === 'scene');
   tabPaint.classList.toggle('on', mode === 'paint');
   tabScene.classList.toggle('on', mode === 'scene');
+  document.getElementById('modeFloat').classList.toggle('scene-mode', mode === 'scene');
   if(mode === 'scene'){
     applyWrapTextures();  // 3Dへ切り替えるたび、最新のぬりえを自動で反映する
     // 表示直後はレイアウト確定が遅れることがあるため、数回に分けて再計測する
