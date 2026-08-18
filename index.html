@@ -156,15 +156,34 @@
   button.plain:hover{border-color:#bbb;}
   #fileInputImg{display:none;}
 
-  /* 画像配置中のオーバーレイ操作 */
+  /* 画像配置中のオーバーレイ操作。気づかれず放置されないよう、
+     画面全体を薄暗くしつつ、操作パネルを目立つ位置・色で強調する */
+  #imgAdjustOverlay{
+    display:none; position:absolute; inset:0; background:rgba(20,30,25,0.35);
+    z-index:4; pointer-events:none;
+  }
+  #imgAdjustOverlay.on{display:block;}
   #imgAdjustBar{
-    display:none; align-items:center; gap:10px; background:#ffffff; border:1px solid var(--accent2);
-    padding:8px 12px; border-radius:8px; position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
-    font-size:12px; z-index:5;
+    display:none; flex-direction:column; align-items:stretch; gap:10px;
+    background:#ffffff; border:2px solid #8fce5a;
+    box-shadow:0 8px 28px rgba(0,0,0,0.28);
+    padding:14px 16px; border-radius:14px;
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    font-size:13px; z-index:6; width:min(320px, 88vw); color:var(--paint-txt);
   }
   #imgAdjustBar.on{display:flex;}
-  #imgAdjustBar{color:var(--paint-txt);}
-  #imgAdjustBar label{color:var(--paint-dim);}
+  #imgAdjustBar .imgAdjustTitle{
+    font-weight:800; font-size:13.5px; color:#33452a;
+    display:flex; align-items:center; gap:6px;
+  }
+  #imgAdjustBar .sizeRow{display:flex; align-items:center; gap:10px;}
+  #imgAdjustBar label{color:var(--paint-dim); font-size:12px; flex:0 0 auto;}
+  #imgAdjustBar .btnRow{display:flex; gap:8px;}
+  #imgAdjustBar .btnRow button{flex:1;}
+  #bImgOk{
+    background:#8fce5a !important; border-color:#8fce5a !important; color:#20330f !important;
+    font-weight:800 !important;
+  }
 
   /* ===== 3D画面 ===== */
   #sceneView{position:relative;}
@@ -319,11 +338,17 @@
     <div id="canvasHost">
       <canvas id="paintCanvas"></canvas>
     </div>
+    <div id="imgAdjustOverlay"></div>
     <div id="imgAdjustBar">
-      <label>おおきさ</label>
-      <input type="range" id="imgScaleR" min="10" max="300" value="100">
-      <button class="plain" id="bImgOk">配置を確定</button>
-      <button class="plain" id="bImgCancel">取り消し</button>
+      <div class="imgAdjustTitle">🖼️ 画像の位置を調整してください</div>
+      <div class="sizeRow">
+        <label>おおきさ</label>
+        <input type="range" id="imgScaleR" min="10" max="300" value="100">
+      </div>
+      <div class="btnRow">
+        <button class="plain" id="bImgCancel">取り消し</button>
+        <button class="plain" id="bImgOk">✓ 配置を確定</button>
+      </div>
     </div>
     <div id="toolbar">
       <div class="toolGroup">
@@ -596,6 +621,7 @@ function refreshThumb(id){
 }
 
 function selectFace(id){
+  commitPendingImagePlacementIfAny();
   state.faceId = id;
   Object.values(faceBtnEls).forEach(b => b.classList.remove('on'));
   faceBtnEls[id].classList.add('on');
@@ -803,6 +829,7 @@ document.getElementById('bUndo').onclick = () => undoFace(state.faceId);
 let imgPlacing = null; // {img, x,y, baseScale, curScale}
 const fileInputImg = document.getElementById('fileInputImg');
 const imgAdjustBar = document.getElementById('imgAdjustBar');
+const imgAdjustOverlay = document.getElementById('imgAdjustOverlay');
 const imgScaleR = document.getElementById('imgScaleR');
 
 document.getElementById('bImgLoad').onclick = () => fileInputImg.click();
@@ -825,8 +852,10 @@ function startImagePlacement(img){
   imgPlacing = { img, x: cw/2, y: ch/2, baseScale, curScale: 1 };
   imgScaleR.value = 100;
   imgAdjustBar.classList.add('on');
+  imgAdjustOverlay.classList.add('on');
   redrawWithPlacement();
   enableImageDrag();
+  toast('大きさ・位置を調整して「配置を確定」を押してください');
 }
 
 function redrawWithPlacement(){
@@ -876,16 +905,27 @@ mainCanvas.addEventListener('touchmove', e => {
   redrawWithPlacement();
 }, { passive:true });
 
-document.getElementById('bImgOk').onclick = () => {
+// 画像配置を確定させないまま面を切り替えたり3Dへ移動したりすると、
+// せっかく置いた画像が消えたように見えてしまう。そうならないよう、
+// 他の操作に移る直前に「配置したまま」自動で確定させる。
+function commitPendingImagePlacementIfAny(){
+  if(!imgPlacing) return;
   commitMainToFace();
   pushUndoSnapshot(state.faceId);
   refreshThumb(state.faceId);
   imgPlacing = null;
   imgAdjustBar.classList.remove('on');
+  imgAdjustOverlay.classList.remove('on');
+}
+
+document.getElementById('bImgOk').onclick = () => {
+  commitPendingImagePlacementIfAny();
+  toast('画像を配置しました');
 };
 document.getElementById('bImgCancel').onclick = () => {
   imgPlacing = null;
   imgAdjustBar.classList.remove('on');
+  imgAdjustOverlay.classList.remove('on');
   syncMainCanvas();
 };
 
@@ -901,6 +941,7 @@ tabPaint.onclick = () => switchMode('paint');
 tabScene.onclick = () => switchMode('scene');
 
 function switchMode(mode){
+  if(mode === 'scene') commitPendingImagePlacementIfAny();
   paintView.classList.toggle('on', mode === 'paint');
   sceneView.classList.toggle('on', mode === 'scene');
   tabPaint.classList.toggle('on', mode === 'paint');
