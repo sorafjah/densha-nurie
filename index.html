@@ -45,16 +45,15 @@
   }
 
   /* ヘッダーは廃止し、モード切替と使い方を右下のフローティングパネルにまとめる。
-     画面全体を編集領域として広く使えるようにするため。 */
+     画面全体を編集領域として広く使えるようにするため。
+     常に画面右下ぎりぎりに固定し、下の操作ボタンとは重ならないよう
+     ツールバー側に余白（#toolbarのpadding-right）を確保する方式にする。 */
   #modeFloat{
-    position:fixed; right:14px; bottom:78px; z-index:50;
+    position:fixed; right:14px; bottom:14px; z-index:50;
     display:flex; align-items:center; gap:8px;
     background:#ffffff; border:1px solid #d8e6c8; border-radius:26px;
     padding:6px; box-shadow:0 4px 16px rgba(30,60,40,0.18);
-    transition:bottom .15s ease;
   }
-  /* 3D画面にはツールバーが無いので、画面端に近い位置まで下げる */
-  #modeFloat.scene-mode{ bottom:14px; }
   .modeTabs{display:flex; gap:6px; background:transparent;}
   .modeTabs button{
     border:1px solid #b9dd8e; background:#ffffff; color:#33452a; font-weight:700; font-size:13px;
@@ -64,6 +63,7 @@
   #modeFloat #bHowto{
     border-radius:50%; width:38px; height:38px; padding:0;
     display:flex; align-items:center; justify-content:center; font-size:16px;
+    order:-1; /* 「？」をタブより左に表示する */
   }
 
   #paintView, #sceneView{flex:1 1 auto; min-height:0; display:none;}
@@ -104,7 +104,7 @@
 
   #toolbar{
     flex:0 0 auto; background:var(--paint-panel); border-top:1px solid var(--paint-line);
-    padding:10px 14px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:10px 190px 10px 14px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
   }
   .toolGroup{display:flex; align-items:center; gap:6px;}
   .toolGroup .glabel{font-size:11px; color:var(--paint-dim); margin-right:2px;}
@@ -286,8 +286,7 @@
 
   @media (max-width: 780px){
     /* header は廃止 */
-    #modeFloat{right:10px; bottom:70px; padding:5px;}
-    #modeFloat.scene-mode{bottom:10px;}
+    #modeFloat{right:10px; bottom:10px; padding:5px;}
     .modeTabs button{padding:6px 10px; font-size:12px;}
     /* .wrapBtnは廃止 */
 
@@ -307,7 +306,9 @@
     #imgAdjustBar{padding:8px 10px; gap:8px;}
     #imgAdjustBar .imgAdjustTitle{font-size:12px; width:100%;}
     #imgAdjustBar .sizeRow{flex:1 1 100%;}
-    #toolbar{padding:8px 10px; gap:10px; overflow-x:auto;}
+    /* 横スクロールする最後のボタン群が右下のmodeFloatに隠れないよう、
+       スクロール終端に余白を確保する */
+    #toolbar{padding:8px 130px 8px 10px; gap:10px; overflow-x:auto;}
     .toolGroup{flex:0 0 auto;}
     .toolBtn{width:34px;height:34px;font-size:15px;}
     input[type=range]{width:70px;}
@@ -953,7 +954,6 @@ function switchMode(mode){
   sceneView.classList.toggle('on', mode === 'scene');
   tabPaint.classList.toggle('on', mode === 'paint');
   tabScene.classList.toggle('on', mode === 'scene');
-  document.getElementById('modeFloat').classList.toggle('scene-mode', mode === 'scene');
   if(mode === 'scene'){
     applyWrapTextures();  // 3Dへ切り替えるたび、最新のぬりえを自動で反映する
     // 表示直後はレイアウト確定が遅れることがあるため、数回に分けて再計測する
