@@ -87,7 +87,7 @@
   #paintCenter{flex:1 1 auto; display:flex; flex-direction:column; min-width:0; position:relative; background:var(--paint-bg);}
   #canvasHost{
     flex:1 1 auto; display:flex; align-items:center; justify-content:center;
-    background:var(--paint-bg);
+    background:var(--paint-bg); position:relative;
     padding:24px; overflow:auto; min-height:0;
   }
   #paintCanvas{
@@ -157,29 +157,28 @@
   #fileInputImg{display:none;}
 
   /* 画像配置中のオーバーレイ操作。気づかれず放置されないよう、
-     画面全体を薄暗くしつつ、操作パネルを目立つ位置・色で強調する */
+     画面全体を薄暗くしつつ、ツールバーの真上（キャンバスとは重ならない位置）に
+     横幅いっぱいの帯として固定表示する */
   #imgAdjustOverlay{
     display:none; position:absolute; inset:0; background:rgba(20,30,25,0.35);
     z-index:4; pointer-events:none;
   }
   #imgAdjustOverlay.on{display:block;}
   #imgAdjustBar{
-    display:none; flex-direction:column; align-items:stretch; gap:10px;
-    background:#ffffff; border:2px solid #8fce5a;
-    box-shadow:0 8px 28px rgba(0,0,0,0.28);
-    padding:14px 16px; border-radius:14px;
-    position:absolute; top:14px; left:50%; transform:translateX(-50%);
-    font-size:13px; z-index:6; width:min(320px, 88vw); color:var(--paint-txt);
+    display:none; align-items:center; gap:14px; flex-wrap:wrap;
+    background:#eef8e2; border-top:2px solid #8fce5a; border-bottom:1px solid #b9dd8e;
+    box-shadow:0 -2px 10px rgba(0,0,0,0.08);
+    padding:10px 16px; position:relative; z-index:6; color:var(--paint-txt);
   }
   #imgAdjustBar.on{display:flex;}
   #imgAdjustBar .imgAdjustTitle{
     font-weight:800; font-size:13.5px; color:#33452a;
-    display:flex; align-items:center; gap:6px;
+    display:flex; align-items:center; gap:6px; flex:0 0 auto;
   }
-  #imgAdjustBar .sizeRow{display:flex; align-items:center; gap:10px;}
+  #imgAdjustBar .sizeRow{display:flex; align-items:center; gap:10px; flex:1 1 160px;}
   #imgAdjustBar label{color:var(--paint-dim); font-size:12px; flex:0 0 auto;}
-  #imgAdjustBar .btnRow{display:flex; gap:8px;}
-  #imgAdjustBar .btnRow button{flex:1;}
+  #imgAdjustBar .btnRow{display:flex; gap:8px; flex:0 0 auto;}
+  #imgAdjustBar .btnRow button{flex:0 0 auto;}
   #bImgOk{
     background:#8fce5a !important; border-color:#8fce5a !important; color:#20330f !important;
     font-weight:800 !important;
@@ -299,6 +298,9 @@
     .faceBtn .fname{font-size:11px;}
 
     #canvasHost{padding:10px;}
+    #imgAdjustBar{padding:8px 10px; gap:8px;}
+    #imgAdjustBar .imgAdjustTitle{font-size:12px; width:100%;}
+    #imgAdjustBar .sizeRow{flex:1 1 100%;}
     #toolbar{padding:8px 10px; gap:10px; overflow-x:auto;}
     .toolGroup{flex:0 0 auto;}
     .toolBtn{width:34px;height:34px;font-size:15px;}
@@ -337,8 +339,8 @@
   <div id="paintCenter">
     <div id="canvasHost">
       <canvas id="paintCanvas"></canvas>
+      <div id="imgAdjustOverlay"></div>
     </div>
-    <div id="imgAdjustOverlay"></div>
     <div id="imgAdjustBar">
       <div class="imgAdjustTitle">🖼️ 画像の位置を調整してください</div>
       <div class="sizeRow">
